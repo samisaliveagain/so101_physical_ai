@@ -1,0 +1,33 @@
+Bootstrap: docker
+From: osrf/ros:jazzy-desktop-full
+
+%labels
+    Author shubhamnagar
+    Description ROS 2 Jazzy, Gazebo Harmonic, SO-101 controllers, and LeRobot dataset runtime
+
+%environment
+    export ROS_DISTRO=jazzy
+    export LEROBOT_PYTHON=/opt/lerobot/bin/python
+    export QT_QPA_PLATFORM=offscreen
+    export PYTHONUNBUFFERED=1
+    export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+
+%post
+    set -eux
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        ffmpeg git libgl1-mesa-dri libglx-mesa0 mesa-utils python3-colcon-common-extensions \
+        python3-pip python3-venv ros-jazzy-gz-ros2-control ros-jazzy-joint-state-broadcaster \
+        ros-jazzy-joint-trajectory-controller ros-jazzy-ros-gz ros-jazzy-ros2-controllers \
+        ros-jazzy-rmw-fastrtps-cpp ros-jazzy-xacro
+    python3 -m venv --system-site-packages /opt/lerobot
+    /opt/lerobot/bin/pip install --no-cache-dir --upgrade pip
+    /opt/lerobot/bin/pip install --no-cache-dir 'lerobot[dataset]==0.5.1'
+    rm -rf /var/lib/apt/lists/* /root/.cache
+
+%runscript
+    exec "$@"
+
+%test
+    bash -lc '. /opt/ros/jazzy/setup.bash && command -v gz && command -v ros2 && /opt/lerobot/bin/python -c "import lerobot, rclpy, av; print(lerobot.__version__)"'

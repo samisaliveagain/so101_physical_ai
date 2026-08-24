@@ -1,0 +1,132 @@
+<?xml version="1.0"?>
+<sdf version="1.11">
+  <model name="training_workspace">
+    <static>true</static>
+
+    <link name="furniture">
+      <!-- Keep the supplied table STL as the visual, but use a perfectly flat
+           tabletop collision. A concave triangle-mesh contact surface imparts
+           small, persistent yaw torques to light objects in Bullet. -->
+      <collision name="table_collision">
+        <pose>0 0 0.615 0 0 0</pose>
+        <geometry>
+          <box><size>0.80 0.80 0.030</size></box>
+        </geometry>
+      </collision>
+      <visual name="white_table">
+        <pose>0 0 0.60 0 0 0</pose>
+        <geometry>
+          <mesh><uri>meshes/table.stl</uri></mesh>
+        </geometry>
+        <material>
+          <ambient>0.83 0.83 0.80 1</ambient>
+          <diffuse>0.92 0.92 0.89 1</diffuse>
+          <specular>0.12 0.12 0.12 1</specular>
+          <pbr><metal><roughness>0.72</roughness><metalness>0.0</metalness></metal></pbr>
+        </material>
+      </visual>
+
+      <collision name="wall_collision">
+        <pose>0 0.60 0.75 0 0 0</pose>
+        <geometry>
+          <mesh><uri>meshes/wall.stl</uri></mesh>
+        </geometry>
+      </collision>
+      <visual name="wall_mesh">
+        <pose>0 0.60 0.75 0 0 0</pose>
+        <geometry>
+          <mesh><uri>meshes/wall.stl</uri></mesh>
+        </geometry>
+        <material>
+          <ambient>0.88 0.88 0.85 1</ambient>
+          <diffuse>0.96 0.96 0.93 1</diffuse>
+          <pbr><metal><roughness>0.90</roughness><metalness>0.0</metalness></metal></pbr>
+        </material>
+      </visual>
+      <!-- A shallow image plane reproduces the wall appearance seen by the cameras. -->
+      <visual name="wall_texture">
+        <pose>0 0.399 0.75 0 0 0</pose>
+        <geometry>
+          <plane><normal>0 -1 0</normal><size>2.0 1.5</size></plane>
+        </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0.02 0.02 0.02 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://training_workspace/materials/textures/wall.png</albedo_map>
+              <roughness>0.95</roughness>
+              <metalness>0.0</metalness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+
+      <collision name="board_collision">
+        <pose>-0.40 0.388 1.14 0 0 0</pose>
+        <geometry>
+          <mesh><uri>meshes/board.stl</uri></mesh>
+        </geometry>
+      </collision>
+      <visual name="board_mesh">
+        <pose>-0.40 0.388 1.14 0 0 0</pose>
+        <geometry>
+          <mesh><uri>meshes/board.stl</uri></mesh>
+        </geometry>
+        <material>
+          <ambient>0.45 0.27 0.12 1</ambient>
+          <diffuse>0.65 0.42 0.22 1</diffuse>
+          <pbr><metal><roughness>0.90</roughness><metalness>0.0</metalness></metal></pbr>
+        </material>
+      </visual>
+      <visual name="cork_texture">
+        <pose>-0.40 0.377 1.14 0 0 0</pose>
+        <geometry>
+          <plane><normal>0 -1 0</normal><size>0.80 0.50</size></plane>
+        </geometry>
+        <material>
+          <ambient>0.72 0.48 0.25 1</ambient>
+          <diffuse>0.82 0.57 0.32 1</diffuse>
+          <specular>0.01 0.01 0.01 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://training_workspace/materials/textures/board.png</albedo_map>
+              <roughness>0.92</roughness>
+              <metalness>0.0</metalness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+
+      <!-- Fixed UGREEN-style external camera used as observation.images.left. -->
+      <visual name="left_camera_body">
+        <pose>0.10 -0.68 1.02 0 0.18 1.57079632679</pose>
+        <geometry><box><size>0.055 0.075 0.045</size></box></geometry>
+        <material>
+          <ambient>0.015 0.015 0.020 1</ambient>
+          <diffuse>0.025 0.025 0.030 1</diffuse>
+          <pbr><metal><roughness>0.4</roughness><metalness>0.15</metalness></metal></pbr>
+        </material>
+      </visual>
+      <visual name="left_camera_stand">
+        <pose>0.10 -0.68 0.505 0 0 0</pose>
+        <geometry><cylinder><radius>0.008</radius><length>0.99</length></cylinder></geometry>
+        <material><ambient>0.03 0.03 0.035 1</ambient><diffuse>0.04 0.04 0.045 1</diffuse></material>
+      </visual>
+
+      <sensor name="left_camera" type="camera">
+        <pose>0.10 -0.68 1.02 0 0.18 1.57079632679</pose>
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <topic>/so101/camera/left/image</topic>
+        <camera name="left">
+          <horizontal_fov>1.0471975512</horizontal_fov>
+          <image><width>640</width><height>480</height><format>R8G8B8</format></image>
+          <clip><near>0.03</near><far>5.0</far></clip>
+          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.002</stddev></noise>
+        </camera>
+      </sensor>
+    </link>
+  </model>
+</sdf>

@@ -1,0 +1,50 @@
+# Canonical local hardware mapping for SO-101 deployment.
+# Use stable /dev symlinks so USB enumeration order cannot swap the cameras.
+
+[robot]
+type = "so101_follower"
+id = "my_awesome_follower_arm"
+port = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5A68011297-if00"
+calibration = "/home/shubhamnagar/.cache/huggingface/lerobot/calibration/robots/so_follower/my_awesome_follower_arm.json"
+
+[cameras.left]
+# UGREEN fixed external/workspace view.
+device = "/dev/v4l/by-id/usb-UGREEN_Camera_UGREEN_Camera_SN0001-video-index0"
+width = 640
+height = 480
+fps = 30
+fourcc = "MJPG"
+dataset_key = "observation.images.left"
+policy_key = "observation.images.exterior_1_left"
+
+[cameras.fpv]
+# Innomaker robot-mounted/FPV view. Uncover and aim this camera before rollout.
+device = "/dev/v4l/by-id/usb-Innomaker_Innomaker-U20CAM-720P_SN0001-video-index0"
+width = 640
+height = 480
+fps = 30
+fourcc = "MJPG"
+dataset_key = "observation.images.fpv"
+policy_key = "observation.images.exterior_2_left"
+
+[safety]
+# These position bounds are the demonstrated-data extrema, not the mechanical extrema.
+joint_names = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
+joint_min = [-124.351646, -120.747253, -97.582420, -108.219780, -180.0, 0.0]
+joint_max = [112.307693, 105.362640, 97.494507, 108.835167, 180.0, 100.0]
+# Dataset 99th-percentile frame deltas; a larger executed first step is clipped to these bounds.
+max_model_delta = [2.461538, 4.043957, 4.835167, 4.131866, 4.307693, 5.311355]
+max_chunk_delta = [2.461538, 4.043957, 4.835167, 4.131866, 4.307693, 5.311355]
+# Conservative initial limits in degrees/s and degrees/s^2 (gripper uses normalized units/s).
+max_velocity = [5.0, 5.0, 5.0, 6.0, 8.0, 8.0]
+max_acceleration = [12.0, 12.0, 12.0, 15.0, 20.0, 20.0]
+# Feedback gates: a commanded joint must visibly move and settle near its target.
+tracking_tolerance = [1.0, 1.0, 1.0, 1.0, 1.0, 2.0]
+minimum_commanded_motion = [0.25, 0.25, 0.25, 0.25, 0.25, 0.5]
+minimum_tracking_fraction = 0.25
+control_hz = 30.0
+min_move_duration_s = 2.0
+max_move_duration_s = 8.0
+settle_timeout_s = 4.0
+settle_required_samples = 3
+max_response_age_ms = 3000.0

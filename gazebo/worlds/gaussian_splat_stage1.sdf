@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<sdf version="1.10">
+  <!--
+    Stage 1 intentionally contains no plane, cameras, robot, or legacy scene.
+    Gazebo owns simulation time and physics; the companion GPU viewport owns
+    Gaussian rendering until a render-compositing bridge is introduced.
+  -->
+  <world name="so101_gaussian_stage1">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+
+    <scene>
+      <ambient>0.35 0.35 0.35 1</ambient>
+      <background>0.035 0.035 0.045 1</background>
+      <shadows>false</shadows>
+    </scene>
+  </world>
+</sdf>

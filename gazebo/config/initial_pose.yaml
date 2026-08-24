@@ -1,0 +1,23 @@
+# Authoritative SO-101 simulation start state.
+#
+# All distances and joint angles use SI units: metres and radians.  The launch
+# files load this file for both Gazebo and robot_state_publisher, so do not bake
+# these values into model.sdf or the URDF link poses.
+spawn:
+  frame: world
+  position:
+    x: 0.38
+    y: 0.22
+    z: 0.632
+  orientation_rpy:
+    roll: 0.0
+    pitch: 0.0
+    yaw: 3.14159265359
+
+joints:
+  shoulder_pan: -0.02758485964
+  shoulder_lift: -0.66724473550
+  elbow_flex: 0.63985970198
+  wrist_flex: 0.46787783282
+  wrist_roll: 0.69129414425
+  gripper: -0.00083737440

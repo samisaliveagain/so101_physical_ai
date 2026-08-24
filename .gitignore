@@ -1,0 +1,94 @@
+# Hidden local files and tool state. Keep repository metadata explicitly.
+.*
+!.gitignore
+!.github/
+!.github/**
+
+# Secrets and local environment configuration.
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+*.token
+credentials.json
+secrets.json
+
+# Python and virtual environments.
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyd
+.venv/
+**/.venv/
+venv/
+**/venv/
+env/
+**/env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Datasets, recorded episodes, generated splits, and evaluation artifacts.
+data/
+**/data/
+datasets/
+**/datasets/
+eval/out/
+hardware/camera_probe/
+hardware/heldout_http/
+deployment/http_shadow_test_*.json
+*.parquet
+*.arrow
+*.jsonl
+*.npz
+
+# Raw/generated Gaussian captures. The runnable nut-stacking model assets live
+# under gazebo/models and remain tracked.
+3d_assets/
+gazebo/gaussian/assets/
+
+# ROS 2, colcon, CMake, and package-install outputs.
+build/
+**/build/
+install/
+**/install/
+log/
+**/log/
+logs/
+**/logs/
+CMakeFiles/
+**/CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Runtime logs, temporary files, and editor/OS state.
+*.log
+*.out
+*.err
+*.pid
+*.tmp
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Training outputs, caches, checkpoints, and container images.
+outputs/
+**/outputs/
+wandb/
+**/wandb/
+checkpoints/
+**/checkpoints/
+cache/
+**/cache/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.engine
+*.sif
+*.sqsh
+*.img

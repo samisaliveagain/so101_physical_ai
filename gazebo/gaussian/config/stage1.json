@@ -1,0 +1,15 @@
+{
+  "splat": "/gazebo/gaussian/assets/Aachen-Mitte.cleaned.ply",
+  "camera": {
+    "target": [0.1, -0.05, -0.1],
+    "distance": 2.8,
+    "yaw_degrees": 35.0,
+    "pitch_degrees": 18.0,
+    "fov_degrees": 62.0
+  },
+  "splat_transform": {
+    "position": [0.0, 0.0, 0.0],
+    "rotation_degrees": [180.0, 0.0, 0.0],
+    "scale": 1.0
+  }
+}

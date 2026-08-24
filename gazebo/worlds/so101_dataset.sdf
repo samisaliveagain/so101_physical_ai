@@ -1,0 +1,171 @@
+<?xml version="1.0"?>
+<sdf version="1.11">
+  <world name="so101_dataset_world">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <scene>
+      <ambient>0.55 0.55 0.55 1</ambient>
+      <background>0.80 0.82 0.84 1</background>
+      <shadows>true</shadows>
+      <grid>true</grid>
+    </scene>
+
+    <light name="ceiling_softbox" type="directional">
+      <pose>0 -0.2 2.4 0 0 0</pose>
+      <cast_shadows>true</cast_shadows>
+      <intensity>1.25</intensity>
+      <direction>0.05 0.10 -1.0</direction>
+      <diffuse>0.98 0.96 0.92 1</diffuse>
+      <specular>0.18 0.18 0.18 1</specular>
+    </light>
+    <light name="camera_fill" type="point">
+      <pose>-0.45 -0.65 1.35 0 0 0</pose>
+      <cast_shadows>false</cast_shadows>
+      <intensity>0.65</intensity>
+      <diffuse>0.82 0.86 0.94 1</diffuse>
+      <specular>0.08 0.08 0.08 1</specular>
+      <attenuation><range>4</range><linear>0.22</linear><constant>0.7</constant><quadratic>0.02</quadratic></attenuation>
+    </light>
+
+    <model name="floor">
+      <static>true</static>
+      <link name="floor_link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>6 6</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>6 6</size></plane></geometry>
+          <material>
+            <ambient>0.20 0.21 0.22 1</ambient>
+            <diffuse>0.28 0.29 0.30 1</diffuse>
+            <pbr><metal><roughness>0.85</roughness><metalness>0.0</metalness></metal></pbr>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <include>
+      <uri>model://training_workspace</uri>
+      <name>training_workspace</name>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
+    <!-- The base occupies the far-right portion of the fixed-camera frame, as in the recordings. -->
+    <include>
+      <uri>model://so101_dark_blue</uri>
+      <name>so101</name>
+      <!-- Filled from config/initial_pose.yaml by the launch file. -->
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
+    <!-- The source meshes use millimetres; all Gazebo poses and collision dimensions use metres. -->
+    <model name="red_hex_cap">
+      <pose>0.08 0.02 0.631 0 0 0.18</pose>
+      <!-- Static for reproducible camera validation; prevents contact spin. -->
+      <static>true</static>
+      <link name="cap_link">
+        <velocity_decay><linear>0.15</linear><angular>0.95</angular></velocity_decay>
+        <inertial>
+          <pose>0 0 0.015 0 0 0</pose>
+          <mass>0.050</mass>
+          <inertia><ixx>2.90e-5</ixx><iyy>2.90e-5</iyy><izz>5.10e-5</izz></inertia>
+        </inertial>
+        <collision name="collision">
+          <pose>0 0 0.015 0 0 0</pose>
+          <geometry><cylinder><radius>0.045</radius><length>0.030</length></cylinder></geometry>
+          <surface>
+            <friction>
+              <ode><mu>1.2</mu><mu2>1.2</mu2></ode>
+              <bullet><friction>1.2</friction><friction2>1.2</friction2><rolling_friction>0.20</rolling_friction></bullet>
+              <torsional><coefficient>2.0</coefficient><use_patch_radius>true</use_patch_radius><patch_radius>0.035</patch_radius></torsional>
+            </friction>
+            <contact><collide_without_contact>false</collide_without_contact></contact>
+          </surface>
+        </collision>
+        <visual name="red_cap_mesh">
+          <pose>0.085 0 0 0 0 0</pose>
+          <geometry><mesh><uri>model://stacking_parts/meshes/50mm_hex_cap.stl</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+          <material>
+            <ambient>0.45 0.01 0.008 1</ambient><diffuse>0.78 0.018 0.012 1</diffuse><specular>0.12 0.05 0.05 1</specular>
+            <pbr><metal><roughness>0.52</roughness><metalness>0.0</metalness></metal></pbr>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="red_hex_nut">
+      <!-- Moved 80 mm toward the robot compared with the camera-validation
+           layout, putting the rim comfortably inside the SO-101 workspace. -->
+      <pose>0.10 0.13 0.631 0 0 -0.20</pose>
+      <!-- Dynamic so the gripper can pinch and lift it. DART is the supported
+           physics engine for this world. -->
+      <static>false</static>
+      <link name="nut_link">
+        <velocity_decay><linear>0.15</linear><angular>0.95</angular></velocity_decay>
+        <inertial>
+          <pose>0 0 0.015 0 0 0</pose>
+          <mass>0.045</mass>
+          <inertia><ixx>2.60e-5</ixx><iyy>2.60e-5</iyy><izz>4.60e-5</izz></inertia>
+        </inertial>
+        <!-- Six boxes approximate an annular/hexagonal rim. A solid cylinder
+             would incorrectly prevent a gripper jaw from entering the hole. -->
+        <collision name="rim_0"><pose>0.033 0 0.015 0 0 0</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry>
+          <surface>
+            <friction>
+              <ode><mu>1.2</mu><mu2>1.2</mu2></ode>
+              <bullet><friction>1.2</friction><friction2>1.2</friction2><rolling_friction>0.20</rolling_friction></bullet>
+              <torsional><coefficient>2.0</coefficient><use_patch_radius>true</use_patch_radius><patch_radius>0.035</patch_radius></torsional>
+            </friction>
+            <contact><collide_without_contact>false</collide_without_contact></contact>
+          </surface>
+        </collision>
+        <collision name="rim_1"><pose>0.0165 0.02858 0.015 0 0 1.0472</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry></collision>
+        <collision name="rim_2"><pose>-0.0165 0.02858 0.015 0 0 2.0944</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry></collision>
+        <collision name="rim_3"><pose>-0.033 0 0.015 0 0 3.14159</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry></collision>
+        <collision name="rim_4"><pose>-0.0165 -0.02858 0.015 0 0 4.18879</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry></collision>
+        <collision name="rim_5"><pose>0.0165 -0.02858 0.015 0 0 5.23599</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry></collision>
+        <visual name="red_nut_mesh">
+          <pose>-0.085 0 0 0 0 0</pose>
+          <geometry><mesh><uri>model://stacking_parts/meshes/50mm_nut.stl</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>
+          <material>
+            <ambient>0.45 0.01 0.008 1</ambient><diffuse>0.78 0.018 0.012 1</diffuse><specular>0.12 0.05 0.05 1</specular>
+            <pbr><metal><roughness>0.52</roughness><metalness>0.0</metalness></metal></pbr>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <gui fullscreen="0">
+      <plugin filename="MinimalScene" name="3D View">
+        <gz-gui><title>SO-101 Dataset Scene</title><property type="bool" key="showTitleBar">false</property></gz-gui>
+        <engine>ogre2</engine>
+        <scene>scene</scene>
+        <ambient_light>0.55 0.55 0.55</ambient_light>
+        <background_color>0.8 0.82 0.84</background_color>
+        <camera_pose>-1.20 -1.35 1.25 0 0.42 0.72</camera_pose>
+      </plugin>
+      <plugin filename="GzSceneManager" name="Scene Manager"/>
+      <plugin filename="InteractiveViewControl" name="Interactive view control"/>
+      <plugin filename="CameraTracking" name="Camera Tracking"/>
+      <plugin filename="WorldControl" name="World control">
+        <gz-gui><property type="bool" key="showTitleBar">false</property></gz-gui>
+        <play_pause>true</play_pause><step>true</step><start_paused>false</start_paused>
+      </plugin>
+      <plugin filename="WorldStats" name="World stats">
+        <gz-gui><property type="bool" key="showTitleBar">false</property></gz-gui>
+        <sim_time>true</sim_time><real_time>true</real_time><real_time_factor>true</real_time_factor><iterations>true</iterations>
+      </plugin>
+    </gui>
+  </world>
+</sdf>

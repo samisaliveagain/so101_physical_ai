@@ -1,0 +1,41 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 100
+    use_sim_time: true
+    enforce_command_limits: true
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+arm_controller:
+  ros__parameters:
+    joints:
+      - shoulder_pan
+      - shoulder_lift
+      - elbow_flex
+      - wrist_flex
+      - wrist_roll
+      - gripper
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 50.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    open_loop_control: false
+    constraints:
+      goal_time: 2.0
+      stopped_velocity_tolerance: 0.05
+      shoulder_pan: {trajectory: 0.20, goal: 0.08}
+      shoulder_lift: {trajectory: 0.20, goal: 0.08}
+      elbow_flex: {trajectory: 0.20, goal: 0.08}
+      wrist_flex: {trajectory: 0.20, goal: 0.08}
+      wrist_roll: {trajectory: 0.20, goal: 0.08}
+      # A grasp intentionally creates sustained contact, so the finger can lag
+      # its commanded hard-close position without aborting the action.
+      gripper: {trajectory: 2.0, goal: 2.0}

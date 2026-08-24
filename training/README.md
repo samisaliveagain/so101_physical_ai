@@ -1,0 +1,115 @@
+# SO-101 training tracks
+
+The launchers in this directory keep large artifacts away from the nearly-full local and HPC home
+filesystems:
+
+- local ACT: `/media/shubhamnagar/One Touch/so101_training`
+- RWTH Cosmos: `/hpcwork/$USER/so101_cosmos`
+- Hugging Face and Torch caches are redirected to the same locations.
+
+## Track 1: ACT from scratch on the RTX 4070
+
+The launcher selects the newest `so101_gazebo_randomized_stack_*` dataset, makes a deterministic
+40/5/5 episode split for the current 50 episodes, and trains only on the 40 training episodes. It
+uses both cameras and the six joint positions. It intentionally excludes
+`observation.environment_state`, because that vector contains simulator ground-truth nut positions
+that will not exist on the physical robot.
+
+ACT's transformer and ResNet are initialized from scratch (no `policy.path`, and ImageNet backbone
+weights are disabled):
+
+```bash
+cd /home/shubhamnagar/coding/so101_physical_ai
+training/train_act_local.sh --steps 100000 --batch-size 8
+```
+
+If 8 GB VRAM runs out, restart with `--batch-size 4` (or 2). A zero-write command preview is:
+
+```bash
+training/train_act_local.sh --dry-run
+```
+
+Checkpoints stay on the external disk. To additionally upload policy checkpoints using the already
+configured token named `hpc_access`:
+
+```bash
+training/train_act_local.sh --push-to-hub shubham4413/so101-act-nut-stack
+```
+
+The raw dataset is not uploaded by this command.
+
+The external disk is exFAT, so the launcher keeps Python multiprocessing sockets under `/tmp` while
+all large data remains on the disk. If the launcher reports that the disk is read-only, stop and
+repair/remount the disk before training; otherwise checkpoints cannot be saved safely.
+
+## Track 2: Cosmos Predict2.5 action-conditioned LoRA on RWTH H100
+
+Cosmos does not consume LeRobot joint trajectories directly. First convert the dataset locally.
+The converter downsamples 30 Hz to 5 Hz, encodes the selected RGB view as 320x256 H.264, and uses
+the SO-101 simulation URDF for forward kinematics. Its annotation stores end-effector
+`[x,y,z,roll,pitch,yaw]` and gripper closure in Cosmos' expected schema.
+
+```bash
+cd /home/shubhamnagar/coding/so101_physical_ai
+training/prepare_cosmos_dataset.sh
+```
+
+The command prints the new output directory under
+`/media/shubhamnagar/One Touch/so101_training/cosmos_data/`. To convert the FPV camera instead:
+
+```bash
+CAMERA_KEY=observation.images.fpv training/prepare_cosmos_dataset.sh
+```
+
+Run a one-episode conversion test with `training/prepare_cosmos_dataset.sh --max-episodes 1`.
+
+Copy the completed conversion and scripts to RWTH (quotes are important because the local drive
+name contains a space):
+
+```bash
+LOCAL_DATASET='/media/shubhamnagar/One Touch/so101_training/cosmos_data/so101_stack_YYYYMMDD_HHMMSS' \
+  training/sync_cosmos_to_rwth.sh
+```
+
+Set up Cosmos once:
+
+```bash
+ssh rwth-gpu
+bash /hpcwork/ay713634/so101_cosmos/bundle/setup_cosmos_rwth.sh
+```
+
+The NVIDIA checkpoint is gated. In the browser, accept the license for
+`nvidia/Cosmos-Predict2.5-2B`, then authenticate on the cluster. Do not paste a token into any
+script or Slurm log:
+
+```bash
+export HF_HOME=/hpcwork/$USER/so101_cosmos/cache/huggingface
+/hpcwork/$USER/so101_cosmos/src/cosmos-predict2.5/.venv/bin/hf auth login
+```
+
+Submit one H100 job:
+
+```bash
+sbatch /hpcwork/$USER/so101_cosmos/bundle/train_cosmos_lora_rwth.sbatch
+```
+
+Useful overrides:
+
+```bash
+MAX_ITER=1000 SAVE_ITER=250 GRAD_ACCUM=8 \
+  sbatch --export=ALL /hpcwork/$USER/so101_cosmos/bundle/train_cosmos_lora_rwth.sbatch
+```
+
+The job uses the official 2B action-conditioned checkpoint, inserts rank-32 PEFT LoRA adapters
+into attention and MLP projections, trains at batch size 1 with gradient accumulation 8, and writes
+checkpoints below `/hpcwork/$USER/so101_cosmos/output`. The base checkpoint is resolved to a concrete
+local path before training; this also makes it easy to verify in the log that pretrained weights,
+not random weights, were loaded.
+
+The current 50-episode dataset is enough for a pipeline/overfit experiment, but it is not enough to
+claim a broadly general world-action model. Treat the first 1,000-5,000-step Cosmos run as a
+feasibility test and judge it on the five held-out layouts before collecting substantially more
+diverse episodes.
+
+At the time these scripts were prepared, RWTH reports partition `c23g` as `down`. Submission may
+queue or reject until maintenance ends; that is cluster state, not a problem with the launcher.
