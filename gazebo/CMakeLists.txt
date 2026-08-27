@@ -38,6 +38,8 @@ install(
     scripts/calibrated_to_urdf.py
     scripts/demo_motion.sh
     scripts/run_rviz_cameras.sh
+    scripts/run_act_inference.sh
+    scripts/so101_act_gazebo_bridge.py
     scripts/run_sim_rviz.sh
     scripts/run_world.sh
     scripts/send_calibrated_pose.sh

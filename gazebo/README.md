@@ -150,6 +150,21 @@ in one command:
 ./gazebo/scripts/collect_randomized_lerobot_headless.sh --episodes 10
 ```
 
+To prevent repetition across collection runs, pass the earlier dataset as an
+exclusion set. A candidate is rejected when both its source and destination
+are within 12 mm of a previous layout; accepted layouts in the current run are
+also added to that set. Each episode resets the robot and is saved only after
+the final nut pose confirms a physical stack:
+
+```bash
+./gazebo/scripts/collect_randomized_lerobot_headless.sh \
+  --episodes 50 \
+  --seed 20260826 \
+  --exclude-dataset "/media/shubhamnagar/One Touch/so101_gazebo_randomized_stack_20260824_005251"
+```
+
+Repeat `--exclude-dataset PATH` to exclude multiple earlier collections.
+
 The OneTouch drive must be mounted and writable at
 `/media/shubhamnagar/One Touch`. Each run creates a new timestamped directory,
 for example
@@ -164,6 +179,64 @@ positions in radians and `action` contains the trajectory controller reference.
 `observation.environment_state` stores the eight ground-truth randomized spawn
 values (XYZ and yaw for each part) on every frame.
 The output directory must not already exist, preventing accidental overwrite.
+
+## Run the trained ACT policy in Gazebo
+
+Start the normal simulation in one terminal:
+
+```bash
+./gazebo/scripts/run_sim_rviz.sh
+```
+
+Each interactive launch moves both red parts to a new IK-validated layout near
+the successful episode-42 reference: up to 15 mm independently in `x` and `y`,
+and up to 15 degrees in yaw.  To reproduce the exact SDF layout or change the
+evaluation range:
+
+```bash
+./gazebo/scripts/run_sim_rviz.sh randomize_nuts:=false
+./gazebo/scripts/run_sim_rviz.sh nut_xy_jitter:=0.008 nut_yaw_jitter_deg:=5
+```
+
+In a second terminal, first run inference without moving the robot:
+
+```bash
+./gazebo/scripts/run_act_inference.sh --device cuda --duration 10
+```
+
+The bridge reads `/arm_controller/controller_state` and both 640x480 camera
+topics, loads the final ACT checkpoint directly from the external SSD, and
+publishes raw and safety-bounded predictions on
+`/so101/act/predicted_action` and `/so101/act/commanded_action`. Without
+`--execute`, it does not publish controller commands.
+
+After inspecting the predicted actions, execute one bounded 90-second rollout:
+
+```bash
+./gazebo/scripts/run_act_inference.sh --device cuda --execute
+```
+
+The launcher executes 50 actions from each predicted 100-action ACT chunk and
+then replans from new camera and joint observations. This is an inference-only
+setting; it does not modify or retrain the checkpoint. The 50-action default
+avoids repeatedly replaying only the low-motion start of a chunk. Use
+`--action-horizon 20` for more frequent correction after confirming the policy
+still makes progress, or
+`--action-horizon 100` to reproduce the original open-loop behavior.
+
+The two image streams and controller feedback are buffered and matched using
+their Gazebo simulation timestamps before each inference call. The defaults
+require both camera frames and the corresponding joint state to be within
+50 ms. Queued ROS callbacks are drained between predictions, and a control tick
+is skipped instead of combining mismatched observations. A warning is emitted
+only if no valid camera/state triplet is available continuously for one second;
+an occasional skipped tick between 30 Hz frames is expected.
+
+Executed actions are clipped to the URDF joint limits and rate-limited to
+1.0 rad/s for the arm and 0.8 rad/s for the gripper before being sent to
+`/arm_controller/joint_trajectory`. The bridge stops commanding if either
+camera or the controller state becomes stale. Override the checkpoint with
+`SO101_ACT_CHECKPOINT=/path/to/pretrained_model`.
 
 For every episode, the source nut is sampled in `x=0.075..0.135` and
 `y=0.090..0.155` m. The destination is sampled in `x=0.075..0.145` and

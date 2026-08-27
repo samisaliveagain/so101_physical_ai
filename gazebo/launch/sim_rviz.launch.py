@@ -4,9 +4,9 @@ from pathlib import Path
 import os
 import sys
 
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, TimerAction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, OpaqueFunction, TimerAction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -47,6 +47,23 @@ def _launch_setup(context):
         output="screen",
     )
 
+    randomizer_path = os.path.join(
+        get_package_prefix("so101_gazebo_control"),
+        "lib", "so101_gazebo_control", "randomize_nuts.py",
+    )
+    randomize_nuts = ExecuteProcess(
+        # ROS Jazzy is built for Ubuntu's Python 3.12.  An active Conda or
+        # LeRobot environment must not select an incompatible interpreter.
+        cmd=[
+            "/usr/bin/python3", randomizer_path,
+            "--near-reference",
+            "--xy-jitter", LaunchConfiguration("nut_xy_jitter"),
+            "--yaw-jitter-deg", LaunchConfiguration("nut_yaw_jitter_deg"),
+        ],
+        condition=IfCondition(LaunchConfiguration("randomize_nuts")),
+        output="screen",
+    )
+
     rviz = Node(
         package="rviz2",
         executable="rviz2",
@@ -59,6 +76,9 @@ def _launch_setup(context):
     return [
         simulation,
         TimerAction(period=1.5, actions=[camera_bridge]),
+        # randomize_nuts.py also waits for the Gazebo set_pose service.  The
+        # timer avoids unnecessary startup polling on an ordinary GUI launch.
+        TimerAction(period=2.0, actions=[randomize_nuts]),
         TimerAction(period=3.0, actions=[rviz]),
     ]
 
@@ -85,6 +105,21 @@ def generate_launch_description():
             "launch_rviz",
             default_value="true",
             description="Start RViz together with Gazebo",
+        ),
+        DeclareLaunchArgument(
+            "randomize_nuts",
+            default_value="true",
+            description="Apply a small IK-validated random nut layout at startup",
+        ),
+        DeclareLaunchArgument(
+            "nut_xy_jitter",
+            default_value="0.015",
+            description="Maximum per-axis nut position jitter in metres",
+        ),
+        DeclareLaunchArgument(
+            "nut_yaw_jitter_deg",
+            default_value="15.0",
+            description="Maximum nut yaw jitter in degrees",
         ),
         OpaqueFunction(function=_launch_setup),
     ])

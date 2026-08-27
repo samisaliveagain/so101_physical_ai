@@ -79,6 +79,8 @@ SPLIT_FILE="$TRAIN_ROOT/splits/${DATASET_NAME}_seed42.json"
   --dataset-root "$DATASET_ROOT" --output "$SPLIT_FILE"
 TRAIN_EPISODES=$("$LEROBOT_ROOT/.venv/bin/python" -c \
   'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["train"], separators=(",",":")))' "$SPLIT_FILE")
+TRAIN_EPISODE_COUNT=$("$LEROBOT_ROOT/.venv/bin/python" -c \
+  'import json,sys; print(len(json.load(open(sys.argv[1]))["train"]))' "$SPLIT_FILE")
 
 if [[ "$DRY_RUN" != true ]] && ! "$LEROBOT_ROOT/.venv/bin/python" -c 'import torch,sys; sys.exit(0 if torch.cuda.is_available() else 1)'; then
   echo "CUDA is not visible in the LeRobot environment. Do not start ACT training on CPU." >&2
@@ -115,11 +117,19 @@ if [[ -n "$RESUME_FROM" ]]; then
   RESUME_STEP=$("$LEROBOT_ROOT/.venv/bin/python" -c \
     'import json,sys; print(json.load(open(sys.argv[1]))["step"])' \
     "$CHECKPOINT_DIR/training_state/training_step.json")
+  if ((STEPS <= RESUME_STEP)); then
+    echo "--steps is the final global step and must exceed checkpoint step $RESUME_STEP." >&2
+    exit 1
+  fi
   OUTPUT_DIR=$(dirname -- "$(dirname -- "$CHECKPOINT_DIR")")
   RUN_ID=$(basename "$OUTPUT_DIR")
   CMD=("$LEROBOT_ROOT/.venv/bin/python" "$PORTABLE_TRAIN"
     --config_path="$CONFIG_PATH"
     --resume=true
+    --dataset.repo_id=local/so101_gazebo_act_training
+    --dataset.root="$DATASET_ROOT"
+    --dataset.episodes="$TRAIN_EPISODES"
+    --dataset.video_backend=pyav
     --steps="$STEPS"
     --batch_size="$BATCH_SIZE"
     --num_workers="$NUM_WORKERS")
@@ -159,7 +169,7 @@ if [[ "$PUSH_TO_HUB" == true ]]; then
 fi
 
 echo "Dataset: $DATASET_ROOT"
-echo "Split:   $SPLIT_FILE (40 train episodes for the current 50-episode dataset)"
+echo "Split:   $SPLIT_FILE ($TRAIN_EPISODE_COUNT train episodes)"
 echo "Output:  $OUTPUT_DIR"
 if [[ -n "$RESUME_FROM" ]]; then
   echo "Resume:  $CHECKPOINT_DIR (completed step $RESUME_STEP)"

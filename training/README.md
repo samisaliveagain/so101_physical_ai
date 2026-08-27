@@ -7,7 +7,36 @@ filesystems:
 - RWTH Cosmos: `/hpcwork/$USER/so101_cosmos`
 - Hugging Face and Torch caches are redirected to the same locations.
 
-## Track 1: ACT from scratch on the RTX 4070
+## Track 1: ACT with pretrained vision and static-frame reduction
+
+The recommended launcher always creates a fresh run: it has no resume option
+and never loads an older ACT checkpoint. It starts ResNet-18 from ImageNet
+weights, leaves ACT's VAE enabled, uses batch size 8, predicts 100-action
+chunks, and records an inference horizon of 10 actions in the checkpoint.
+
+Long stationary runs are capped in the training sample index without modifying
+or copying the source videos. ACT action targets still come from the original
+contiguous 30 Hz timeline. The default 100-episode dataset retains 90 training
+episodes after the deterministic validation/test holdout.
+
+```bash
+cd /home/shubhamnagar/coding/so101_physical_ai
+training/train_act_pretrained_trimmed.sh
+```
+
+The run, checkpoints, model/cache downloads and trim report are written below
+`/media/shubhamnagar/One Touch/so101_training`. Checkpoints are saved every
+10,000 steps through step 100,000. Preview the complete command without
+starting training:
+
+```bash
+training/train_act_pretrained_trimmed.sh --dry-run
+```
+
+The previous launcher below is retained only for reproducing the original
+randomly initialized ResNet experiment.
+
+## Legacy Track 1: ACT fully from scratch on the RTX 4070
 
 The launcher selects the newest `so101_gazebo_randomized_stack_*` dataset, makes a deterministic
 40/5/5 episode split for the current 50 episodes, and trains only on the 40 training episodes. It

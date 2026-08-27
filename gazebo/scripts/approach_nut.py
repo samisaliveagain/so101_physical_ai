@@ -7,10 +7,12 @@ import random
 import sys
 import time
 import xml.etree.ElementTree as ET
+from collections import deque
 from pathlib import Path
 
 import rclpy
 from control_msgs.action import FollowJointTrajectory
+from control_msgs.msg import JointTrajectoryControllerState
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
@@ -92,6 +94,8 @@ class Kinematics:
             q = list(start)
             for _ in range(350):
                 err = self.error(q, target)
+                if max(abs(value) for value in err) <= 1e-5:
+                    break
                 # Numerical error Jacobian, dimensions 5 task errors x 5 joints.
                 eps = 1e-5
                 jac = [[0.0] * 5 for _ in range(5)]
@@ -134,22 +138,66 @@ class ApproachNode(Node):
     def __init__(self):
         super().__init__("so101_approach_nut")
         self.positions = None
+        self.references = None
+        self.position_sequence = 0
         self.create_subscription(JointState, "/joint_states", self._joint_state, 10)
+        self.create_subscription(
+            JointTrajectoryControllerState,
+            "/arm_controller/controller_state",
+            self._controller_state,
+            20,
+        )
         self.client = ActionClient(self, FollowJointTrajectory, "/arm_controller/follow_joint_trajectory")
 
     def _joint_state(self, msg):
         values = dict(zip(msg.name, msg.position))
         if all(name in values for name in JOINTS + ["gripper"]):
             self.positions = [values[name] for name in JOINTS + ["gripper"]]
+            self.position_sequence += 1
 
-    def send(self, start, arm_goal, gripper_goal, duration, samples=4, phase="motion", allow_contact=False):
+    def _controller_state(self, msg):
+        if len(msg.reference.positions) != len(msg.joint_names):
+            return
+        values = dict(zip(msg.joint_names, msg.reference.positions))
+        if all(name in values for name in JOINTS + ["gripper"]):
+            self.references = [values[name] for name in JOINTS + ["gripper"]]
+
+    def send(
+            self, start, arm_goal, gripper_goal, duration, samples=4, phase="motion",
+            allow_contact=False, stop_on_gripper_contact=False, hold_gripper=False):
+        """Send one arm phase while preserving a physically blocked grasp.
+
+        ``hold_gripper`` deliberately keeps every trajectory waypoint at the
+        closed command.  In particular, it must not interpolate from the
+        measured gripper angle: contact prevents a position-controlled jaw
+        from reaching its hard-close command, and using that measured angle as
+        the next phase's starting reference creates a brief opening command.
+
+        ``stop_on_gripper_contact`` ends the close phase after the jaw has
+        moved substantially and then remained blocked for a short window.  It
+        avoids recording several seconds of an indistinguishable, stationary
+        grasp while waiting for the trajectory controller's goal timeout.
+        """
         goal = FollowJointTrajectory.Goal()
         goal.trajectory.joint_names = JOINTS + ["gripper"]
         destination = list(arm_goal) + [gripper_goal]
+        if hold_gripper:
+            # Make the carried-object constraint active from the instant this
+            # goal replaces the preceding one.  This prevents the controller
+            # reference from relaxing toward the contact-blocked measurement.
+            point = JointTrajectoryPoint()
+            point.positions = list(start[:5]) + [gripper_goal]
+            goal.trajectory.points.append(point)
         for step in range(1, samples + 1):
             alpha = step / samples
             point = JointTrajectoryPoint()
-            point.positions = [start[i] + alpha * (destination[i] - start[i]) for i in range(6)]
+            arm_positions = [start[i] + alpha * (arm_goal[i] - start[i]) for i in range(5)]
+            gripper_position = (
+                gripper_goal
+                if hold_gripper
+                else start[5] + alpha * (gripper_goal - start[5])
+            )
+            point.positions = arm_positions + [gripper_position]
             seconds = duration * alpha
             point.time_from_start.sec = int(seconds)
             point.time_from_start.nanosec = int((seconds - int(seconds)) * 1e9)
@@ -160,7 +208,70 @@ class ApproachNode(Node):
         if handle is None or not handle.accepted:
             raise RuntimeError(f"controller rejected the {phase} trajectory")
         result_future = handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future)
+        if stop_on_gripper_contact:
+            if gripper_goal >= start[5]:
+                raise ValueError("gripper contact detection requires a closing trajectory")
+            contact_window = deque()
+            contact_detected = False
+            contact_gripper_command = gripper_goal
+            last_position_sequence = self.position_sequence
+            wait_deadline = time.monotonic() + duration + 3.0
+            while rclpy.ok() and not result_future.done() and time.monotonic() < wait_deadline:
+                rclpy.spin_once(self, timeout_sec=0.02)
+                if self.position_sequence == last_position_sequence:
+                    continue
+                last_position_sequence = self.position_sequence
+                now = time.monotonic()
+                current_gripper = self.positions[5]
+                contact_window.append((now, current_gripper))
+                while contact_window and contact_window[0][0] < now - 0.30:
+                    contact_window.popleft()
+                moved = start[5] - current_gripper
+                remaining = current_gripper - gripper_goal
+                stalled = (
+                    len(contact_window) >= 5
+                    and contact_window[-1][0] - contact_window[0][0] >= 0.25
+                    and max(value for _, value in contact_window)
+                    - min(value for _, value in contact_window) <= 0.015
+                )
+                if moved >= 0.20 and remaining >= 0.05 and stalled:
+                    # Preserve the command that was active at contact.  It is
+                    # already below the measured angle and therefore supplies
+                    # preload, without stepping all the way to the hard-close
+                    # limit and injecting a large contact impulse.
+                    if self.references is not None:
+                        contact_gripper_command = min(
+                            self.positions[5] - 0.02,
+                            self.references[5],
+                        )
+                        contact_gripper_command = max(gripper_goal, contact_gripper_command)
+                    cancel_future = handle.cancel_goal_async()
+                    cancel_deadline = time.monotonic() + 1.0
+                    while (rclpy.ok() and not cancel_future.done()
+                           and time.monotonic() < cancel_deadline):
+                        rclpy.spin_once(self, timeout_sec=0.02)
+                    response = cancel_future.result() if cancel_future.done() else None
+                    if response is not None and response.goals_canceling:
+                        contact_detected = True
+                        # Ensure the canceled goal has released the controller
+                        # before immediately starting the lift phase.
+                        release_deadline = time.monotonic() + 0.5
+                        while (rclpy.ok() and not result_future.done()
+                               and time.monotonic() < release_deadline):
+                            rclpy.spin_once(self, timeout_sec=0.02)
+                        break
+            if contact_detected:
+                self.get_logger().info(
+                    f"{phase}: detected stable contact at measured gripper="
+                    f"{self.positions[5]:.3f} rad; holding {contact_gripper_command:.3f} rad "
+                    "and beginning lift without goal-timeout pause")
+                # The arm starts the next phase from feedback, but the gripper
+                # start value remains the contact-time command reference.
+                return list(self.positions[:5]) + [contact_gripper_command]
+            if not result_future.done():
+                raise RuntimeError(f"{phase} trajectory did not finish within {duration + 3.0:.1f} seconds")
+        else:
+            rclpy.spin_until_future_complete(self, result_future)
         wrapped = result_future.result()
         if wrapped is None:
             raise RuntimeError(f"{phase} trajectory returned no result")
@@ -180,7 +291,7 @@ class ApproachNode(Node):
                 self.get_logger().warning(
                     f"{phase}: accepting expected contact stop; arm error={arm_error:.3f} rad, "
                     f"measured gripper={self.positions[5]:.3f} rad (command={gripper_goal:.3f})")
-                return list(self.positions)
+                return list(self.positions[:5]) + [gripper_goal]
             raise RuntimeError(
                 f"{phase} trajectory failed (action status={wrapped.status}, "
                 f"controller code={wrapped.result.error_code}, detail={wrapped.result.error_string!r}, "
@@ -241,45 +352,62 @@ def main():
     node.get_logger().info(
         f"target world XYZ={target}; IK error={error*1000:.1f} mm, downward alignment={downward:.3f}")
 
-    state = node.send(node.positions, goal_q, args.open_angle, args.duration, phase="approach")
-    if args.approach_only:
-        print(f"Approach complete. Open gripper is above the nut target at {target} m.")
-    else:
+    # Plan every Cartesian phase before sending the first command.  Computing
+    # IK between executed phases used to leave several seconds of identical
+    # observations in the middle of each demonstration, making grasp state
+    # ambiguous to a one-observation ACT policy.
+    if not args.approach_only:
         grasp_target = (rim_x, rim_y, args.z + args.grasp_height)
         grasp_q, error, downward = kinematics.ik(grasp_target, goal_q, radial)
         node.get_logger().info(
-            f"descending to {grasp_target}; IK error={error*1000:.1f} mm, downward alignment={downward:.3f}")
-        state = node.send(state, grasp_q, args.open_angle, max(2.5, args.duration * 0.55), phase="descent")
-        node.get_logger().info(f"closing gripper fully to {args.close_angle:.3f} rad across the nut rim")
-        state = node.send(state, grasp_q, args.close_angle, 4.0, samples=8,
-                          phase="gripper close", allow_contact=True)
-        if args.grasp_only:
-            print("Grasp sequence complete: the gripper is centered over the nut and fully closed.")
-        else:
-            # First lift vertically; this is also the physical grasp test.
+            f"planned grasp XYZ={grasp_target}; IK error={error*1000:.1f} mm, "
+            f"downward alignment={downward:.3f}")
+        if not args.grasp_only:
             lift_target = (args.x, args.y, args.z + args.lift_height)
             lift_q, error, downward = kinematics.ik(lift_target, grasp_q, radial)
-            node.get_logger().info(f"lifting grasped nut to {lift_target}")
-            state = node.send(state, lift_q, args.close_angle, 4.0, phase="lift", allow_contact=True)
-
             place_dx, place_dy = BASE_XYZ[0] - args.place_x, BASE_XYZ[1] - args.place_y
             place_length = math.hypot(place_dx, place_dy)
             place_radial = (place_dx / place_length, place_dy / place_length)
             transfer_target = (args.place_x, args.place_y, args.z + args.lift_height)
             transfer_q, error, downward = kinematics.ik(transfer_target, lift_q, place_radial)
-            node.get_logger().info(f"transferring above other part at {transfer_target}")
-            state = node.send(state, transfer_q, args.close_angle, 5.0, phase="transfer", allow_contact=True)
-
             # Other part is 30 mm tall. Preserve the same tool-to-nut grasp
             # offset, placing the carried nut's base on its top surface.
             place_target = (args.place_x, args.place_y, args.z + 0.030 + args.grasp_height)
             place_q, error, downward = kinematics.ik(place_target, transfer_q, place_radial)
+            retreat_q, error, downward = kinematics.ik(transfer_target, place_q, place_radial)
+            node.get_logger().info("complete pick-and-place trajectory planned; beginning execution")
+
+    state = node.send(node.positions, goal_q, args.open_angle, args.duration, phase="approach")
+    if args.approach_only:
+        print(f"Approach complete. Open gripper is above the nut target at {target} m.")
+    else:
+        node.get_logger().info(f"descending to {grasp_target}")
+        state = node.send(state, grasp_q, args.open_angle, max(2.5, args.duration * 0.55), phase="descent")
+        node.get_logger().info(f"closing gripper fully to {args.close_angle:.3f} rad across the nut rim")
+        state = node.send(state, grasp_q, args.close_angle, 4.0, samples=8,
+                          phase="gripper close", allow_contact=True,
+                          stop_on_gripper_contact=True)
+        if args.grasp_only:
+            print("Grasp sequence complete: the gripper is centered over the nut and fully closed.")
+        else:
+            # First lift vertically; this is also the physical grasp test.
+            carry_gripper_goal = state[5]
+            node.get_logger().info(f"lifting grasped nut to {lift_target}")
+            state = node.send(
+                state, lift_q, carry_gripper_goal, 4.0, phase="lift",
+                allow_contact=True, hold_gripper=True)
+
+            node.get_logger().info(f"transferring above other part at {transfer_target}")
+            state = node.send(
+                state, transfer_q, carry_gripper_goal, 5.0, phase="transfer",
+                allow_contact=True, hold_gripper=True)
+
             node.get_logger().info(f"lowering nut onto other part at {place_target}")
-            state = node.send(state, place_q, args.close_angle, 4.0,
-                              phase="place descent", allow_contact=True)
+            state = node.send(
+                state, place_q, carry_gripper_goal, 4.0, phase="place descent",
+                allow_contact=True, hold_gripper=True)
             state = node.send(state, place_q, args.open_angle, 3.0, samples=6, phase="release")
 
-            retreat_q, error, downward = kinematics.ik(transfer_target, place_q, place_radial)
             node.get_logger().info("released; retreating vertically")
             node.send(state, retreat_q, args.open_angle, 3.5, phase="retreat")
             print("Pick-and-place sequence complete. Verify that the nut followed the initial lift and remained on the other part.")

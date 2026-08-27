@@ -71,7 +71,8 @@
 
     <!-- The source meshes use millimetres; all Gazebo poses and collision dimensions use metres. -->
     <model name="red_hex_cap">
-      <pose>0.08 0.02 0.631 0 0 0.18</pose>
+      <!-- Successful in-distribution destination from training episode 42. -->
+      <pose>0.07708498 0.02392881 0.631 0 0 -1.06950760</pose>
       <!-- Static for reproducible camera validation; prevents contact spin. -->
       <static>true</static>
       <link name="cap_link">
@@ -105,9 +106,8 @@
     </model>
 
     <model name="red_hex_nut">
-      <!-- Moved 80 mm toward the robot compared with the camera-validation
-           layout, putting the rim comfortably inside the SO-101 workspace. -->
-      <pose>0.10 0.13 0.631 0 0 -0.20</pose>
+      <!-- Successful in-distribution source from training episode 42. -->
+      <pose>0.13052899 0.13765612 0.631 0 0 2.89777589</pose>
       <!-- Dynamic so the gripper can pinch and lift it. DART is the supported
            physics engine for this world. -->
       <static>false</static>
@@ -118,9 +118,10 @@
           <mass>0.045</mass>
           <inertia><ixx>2.60e-5</ixx><iyy>2.60e-5</iyy><izz>4.60e-5</izz></inertia>
         </inertial>
-        <!-- Six boxes approximate an annular/hexagonal rim. A solid cylinder
-             would incorrectly prevent a gripper jaw from entering the hole. -->
-        <collision name="rim_0"><pose>0.033 0 0.015 0 0 0</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry>
+        <!-- Six boxes approximate an annular/hexagonal rim. Their centres are
+             34 mm from the nut centre and their radial thickness is 16 mm,
+             giving a 26 mm inner edge (52 mm opening) and 42 mm outer edge. -->
+        <collision name="rim_0"><pose>0.034 0 0.015 0 0 0</pose><geometry><box><size>0.016 0.042 0.030</size></box></geometry>
           <surface>
             <friction>
               <ode><mu>1.2</mu><mu2>1.2</mu2></ode>
@@ -130,11 +131,11 @@
             <contact><collide_without_contact>false</collide_without_contact></contact>
           </surface>
         </collision>
-        <collision name="rim_1"><pose>0.0165 0.02858 0.015 0 0 1.0472</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry></collision>
-        <collision name="rim_2"><pose>-0.0165 0.02858 0.015 0 0 2.0944</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry></collision>
-        <collision name="rim_3"><pose>-0.033 0 0.015 0 0 3.14159</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry></collision>
-        <collision name="rim_4"><pose>-0.0165 -0.02858 0.015 0 0 4.18879</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry></collision>
-        <collision name="rim_5"><pose>0.0165 -0.02858 0.015 0 0 5.23599</pose><geometry><box><size>0.018 0.042 0.030</size></box></geometry></collision>
+        <collision name="rim_1"><pose>0.017 0.029445 0.015 0 0 1.0472</pose><geometry><box><size>0.016 0.042 0.030</size></box></geometry></collision>
+        <collision name="rim_2"><pose>-0.017 0.029445 0.015 0 0 2.0944</pose><geometry><box><size>0.016 0.042 0.030</size></box></geometry></collision>
+        <collision name="rim_3"><pose>-0.034 0 0.015 0 0 3.14159</pose><geometry><box><size>0.016 0.042 0.030</size></box></geometry></collision>
+        <collision name="rim_4"><pose>-0.017 -0.029445 0.015 0 0 4.18879</pose><geometry><box><size>0.016 0.042 0.030</size></box></geometry></collision>
+        <collision name="rim_5"><pose>0.017 -0.029445 0.015 0 0 5.23599</pose><geometry><box><size>0.016 0.042 0.030</size></box></geometry></collision>
         <visual name="red_nut_mesh">
           <pose>-0.085 0 0 0 0 0</pose>
           <geometry><mesh><uri>model://stacking_parts/meshes/50mm_nut.stl</uri><scale>0.001 0.001 0.001</scale></mesh></geometry>

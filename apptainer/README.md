@@ -20,3 +20,15 @@ EPISODES=50 SEED=2026 sbatch --export=ALL \
 Gazebo uses EGL headless rendering with `--nv` by default. If Ogre cannot create an OpenGL context
 on the allocated H100, resubmit with `USE_NVIDIA=0 SOFTWARE_RENDERING=1`; Mesa/llvmpipe will render
 the two cameras on CPU.
+
+For a CPU-only 100-episode dataset, first submit the one-episode smoke test,
+then make the collection depend on it:
+
+```bash
+SMOKE_JOB=$(sbatch --parsable collect_headless_gazebo_cpu_smoke_rwth.sbatch)
+sbatch --dependency="afterok:$SMOKE_JOB" collect_headless_gazebo_100ep_rwth.sbatch
+```
+
+This requests 8 CPUs and 16 GB on `c23ms` with no GPU. A one-episode smoke job
+runs first. The collection starts only after the smoke succeeds and writes one
+finalized 100-episode LeRobot dataset under `$HPC_ROOT/datasets`.

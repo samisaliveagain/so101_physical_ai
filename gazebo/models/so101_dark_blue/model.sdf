@@ -494,7 +494,7 @@
       <collision name='gripper_fixed_finger_collision'>
         <pose>-0.008 0.018 -0.073 0 0 0</pose>
         <geometry>
-          <box><size>0.009 0.010 0.065</size></box>
+          <box><size>0.007 0.008 0.065</size></box>
         </geometry>
       </collision>
       <!-- Conservative primitive for the integrated wrist-camera bracket.
@@ -616,9 +616,10 @@
       <collision name='moving_jaw_so101_v1_link_collision'>
         <pose>-0.00115101133 -0.036002669 0.0189 0 0 0</pose>
         <geometry>
-          <!-- Slender finger proxy: retain jaw reach but avoid the old
-               22.3 x 48 mm cross-section snagging on the nut opening. -->
-          <box><size>0.010 0.092 0.018</size></box>
+          <!-- Slender fingertip proxy: retain the 92 mm jaw reach while giving
+               the learned policy several millimetres of centering tolerance
+               inside the nut. Palm and outer-rim collisions remain unchanged. -->
+          <box><size>0.008 0.092 0.012</size></box>
         </geometry>
       </collision>
       <visual name='moving_jaw_so101_v1_link_visual'>
