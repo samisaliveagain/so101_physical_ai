@@ -5,7 +5,7 @@
 type = "so101_follower"
 id = "my_awesome_follower_arm"
 port = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5A68011297-if00"
-calibration = "/home/shubhamnagar/.cache/huggingface/lerobot/calibration/robots/so_follower/my_awesome_follower_arm.json"
+calibration = "~/.cache/huggingface/lerobot/calibration/robots/so_follower/my_awesome_follower_arm.json"
 
 [cameras.left]
 # UGREEN fixed external/workspace view.

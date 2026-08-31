@@ -74,6 +74,12 @@ cmake_install.cmake
 .DS_Store
 Thumbs.db
 
+# Local screen recordings. Curated README animations live in docs/assets/.
+*.mp4
+*.mov
+*.mkv
+*.webm
+
 # Training outputs, caches, checkpoints, and container images.
 outputs/
 **/outputs/

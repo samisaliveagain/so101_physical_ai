@@ -8,17 +8,17 @@ The compute node runs `hpc_vla_jepa_server.py`; the robot laptop runs `so101_htt
 ssh rwth-gpu-sj
 salloc --partition=c23g --gres=gpu:1 --cpus-per-task=8 --mem=64G --time=01:00:00
 srun --pty bash -l
-source /home/dl125352/lerobot/.venv/bin/activate
+source "$HOME/lerobot/.venv/bin/activate"
 export HF_HOME=/hpcwork/dl125352/hf
 export HF_HUB_CACHE=/hpcwork/dl125352/hf/hub
 export TRANSFORMERS_CACHE=/hpcwork/dl125352/hf/hub
-cd /home/dl125352/so101_physical_ai
+cd /path/to/so101_physical_ai
 # Enter the same high-entropy token on the robot laptop; do not put it in shell history.
 read -rsp 'Inference token: ' SO101_INFERENCE_TOKEN && echo
 export SO101_INFERENCE_TOKEN
 python deployment/hpc_vla_jepa_server.py \
   --policy-path /hpcwork/dl125352/train/so101_wm_vlajepa/checkpoints/030000/pretrained_model \
-  --dataset-root /hpcwork/dl125352/hf/hub/datasets--shubham4413--so101_wm/snapshots/96e2ecc061a02d2952083128350f6815de30cb9f \
+  --dataset-root /path/to/so101_wm_dataset \
   --host 0.0.0.0 \
   --port 18080 \
   --auth-token-env SO101_INFERENCE_TOKEN \
@@ -36,11 +36,11 @@ ssh -N -L 18080:COMPUTE_HOSTNAME:18080 rwth-gpu-sj
 In another laptop terminal:
 
 ```bash
-cd /home/shubhamnagar/coding/so101_physical_ai
+cd /path/to/so101_physical_ai
 read -rsp 'Inference token: ' SO101_INFERENCE_TOKEN && echo
 export SO101_INFERENCE_TOKEN
 curl --fail -H "Authorization: Bearer ${SO101_INFERENCE_TOKEN}" http://127.0.0.1:18080/health
-/home/shubhamnagar/lerobot/.venv/bin/python deployment/so101_http_shadow_client.py
+"$HOME/lerobot/.venv/bin/python" deployment/so101_http_shadow_client.py
 ```
 
 This returns a full action chunk and reports the first action's delta from the current joint state. It does not call LeRobot's `send_action`.
@@ -70,7 +70,7 @@ locally generated minimum-jerk trajectory with velocity and acceleration limits.
 Keep a hand on the physical power cut/e-stop and begin with exactly one cycle:
 
 ```bash
-/home/shubhamnagar/lerobot/.venv/bin/python deployment/so101_http_slow_rollout.py \
+"$HOME/lerobot/.venv/bin/python" deployment/so101_http_slow_rollout.py \
   --url http://127.0.0.1:18080 \
   --cycles 1 \
   --arm SAFE_SLOW_ROLLOUT
@@ -103,7 +103,7 @@ feedback thresholds under `[safety]` in `so101_hardware.toml`.
 For a supervised multi-step test, increase the cycle count deliberately:
 
 ```bash
-/home/shubhamnagar/lerobot/.venv/bin/python deployment/so101_http_slow_rollout.py \
+"$HOME/lerobot/.venv/bin/python" deployment/so101_http_slow_rollout.py \
   --url http://127.0.0.1:18080 \
   --cycles 3 \
   --arm SAFE_SLOW_ROLLOUT

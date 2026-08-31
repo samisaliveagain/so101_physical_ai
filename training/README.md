@@ -1,9 +1,9 @@
 # SO-101 training tracks
 
-The launchers in this directory keep large artifacts away from the nearly-full local and HPC home
-filesystems:
+The launchers in this directory keep large artifacts under configurable local
+and HPC storage roots:
 
-- local ACT: `/media/shubhamnagar/One Touch/so101_training`
+- local ACT: `${SO101_STORAGE_ROOT:-$HOME/so101_artifacts}/so101_training`
 - RWTH Cosmos: `/hpcwork/$USER/so101_cosmos`
 - Hugging Face and Torch caches are redirected to the same locations.
 
@@ -11,7 +11,7 @@ filesystems:
 
 The recommended launcher always creates a fresh run: it has no resume option
 and never loads an older ACT checkpoint. It starts ResNet-18 from ImageNet
-weights, leaves ACT's VAE enabled, uses batch size 8, predicts 100-action
+weights, leaves ACT's VAE enabled, uses batch size 8, predicts 50-action
 chunks, and records an inference horizon of 10 actions in the checkpoint.
 
 Long stationary runs are capped in the training sample index without modifying
@@ -20,17 +20,19 @@ contiguous 30 Hz timeline. The default 100-episode dataset retains 90 training
 episodes after the deterministic validation/test holdout.
 
 ```bash
-cd /home/shubhamnagar/coding/so101_physical_ai
-training/train_act_pretrained_trimmed.sh
+cd /path/to/so101_physical_ai
+SO101_STORAGE_ROOT="$HOME/so101_artifacts" \
+training/train_act_pretrained_trimmed.sh --dataset /path/to/lerobot_dataset
 ```
 
 The run, checkpoints, model/cache downloads and trim report are written below
-`/media/shubhamnagar/One Touch/so101_training`. Checkpoints are saved every
+`$SO101_STORAGE_ROOT/so101_training`. Checkpoints are saved every
 10,000 steps through step 100,000. Preview the complete command without
 starting training:
 
 ```bash
-training/train_act_pretrained_trimmed.sh --dry-run
+training/train_act_pretrained_trimmed.sh \
+  --dataset /path/to/lerobot_dataset --dry-run
 ```
 
 The previous launcher below is retained only for reproducing the original
@@ -48,7 +50,7 @@ ACT's transformer and ResNet are initialized from scratch (no `policy.path`, and
 weights are disabled):
 
 ```bash
-cd /home/shubhamnagar/coding/so101_physical_ai
+cd /path/to/so101_physical_ai
 training/train_act_local.sh --steps 100000 --batch-size 8
 ```
 
@@ -58,8 +60,8 @@ If 8 GB VRAM runs out, restart with `--batch-size 4` (or 2). A zero-write comman
 training/train_act_local.sh --dry-run
 ```
 
-Checkpoints stay on the external disk. To additionally upload policy checkpoints using the already
-configured token named `hpc_access`:
+Checkpoints stay under the configured storage root. To additionally upload
+policy checkpoints using the currently active Hugging Face login:
 
 ```bash
 training/train_act_local.sh --push-to-hub shubham4413/so101-act-nut-stack
@@ -67,9 +69,9 @@ training/train_act_local.sh --push-to-hub shubham4413/so101-act-nut-stack
 
 The raw dataset is not uploaded by this command.
 
-The external disk is exFAT, so the launcher keeps Python multiprocessing sockets under `/tmp` while
-all large data remains on the disk. If the launcher reports that the disk is read-only, stop and
-repair/remount the disk before training; otherwise checkpoints cannot be saved safely.
+The launcher keeps Python multiprocessing sockets under `/tmp`, which also
+supports exFAT storage roots. If it reports that storage is read-only, repair
+or remount that filesystem before training.
 
 ## Track 2: Cosmos Predict2.5 action-conditioned LoRA on RWTH H100
 
@@ -79,12 +81,12 @@ the SO-101 simulation URDF for forward kinematics. Its annotation stores end-eff
 `[x,y,z,roll,pitch,yaw]` and gripper closure in Cosmos' expected schema.
 
 ```bash
-cd /home/shubhamnagar/coding/so101_physical_ai
+cd /path/to/so101_physical_ai
 training/prepare_cosmos_dataset.sh
 ```
 
 The command prints the new output directory under
-`/media/shubhamnagar/One Touch/so101_training/cosmos_data/`. To convert the FPV camera instead:
+`$SO101_STORAGE_ROOT/so101_training/cosmos_data/`. To convert the FPV camera instead:
 
 ```bash
 CAMERA_KEY=observation.images.fpv training/prepare_cosmos_dataset.sh
@@ -96,7 +98,7 @@ Copy the completed conversion and scripts to RWTH (quotes are important because 
 name contains a space):
 
 ```bash
-LOCAL_DATASET='/media/shubhamnagar/One Touch/so101_training/cosmos_data/so101_stack_YYYYMMDD_HHMMSS' \
+LOCAL_DATASET="$SO101_STORAGE_ROOT/so101_training/cosmos_data/so101_stack_YYYYMMDD_HHMMSS" \
   training/sync_cosmos_to_rwth.sh
 ```
 
@@ -104,7 +106,7 @@ Set up Cosmos once:
 
 ```bash
 ssh rwth-gpu
-bash /hpcwork/ay713634/so101_cosmos/bundle/setup_cosmos_rwth.sh
+bash /hpcwork/$USER/so101_cosmos/bundle/setup_cosmos_rwth.sh
 ```
 
 The NVIDIA checkpoint is gated. In the browser, accept the license for

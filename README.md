@@ -1,124 +1,200 @@
-# so101_physical_ai
+# SO-101 ACT Nut Stacking
 
-Training two policies on SO-101 (6-DoF) teleoperation data collected on the arm, then validating them
-before real-robot deployment. All training runs on RWTH HPC (`ssh rwth-gpu`, H100); the local RTX 4070
-mobile is for inference/deployment only.
+An end-to-end imitation-learning project for autonomous nut stacking with the
+SO-101 arm in Gazebo. The repository contains the ROS 2 simulation, a
+ground-truth inverse-kinematics expert, randomized LeRobot data collection, ACT
+training, and closed-loop policy inference.
 
-| Model | Dataset | What | Where trained |
-|---|---|---|---|
-| **Diffusion Policy** | [`shubham4413/so101_vla`](https://huggingface.co/datasets/shubham4413/so101_vla) — 149 ep, 112k frames, short stacking clips | Behavior-cloning stacking policy | 1× H100 |
-| **VLA-JEPA** (Qwen3-VL-2B + V-JEPA2 world model + DiT head) | [`shubham4413/so101_wm`](https://huggingface.co/datasets/shubham4413/so101_wm) — 177 ep, 356k frames, longer clips | LoRA fine-tune from `lerobot/VLA-JEPA-Pretrain`, world model **on** | 1× H100 |
+<p align="center">
+  <img src="docs/assets/so101_act_demo.gif" alt="SO-101 ACT policy stacking two nuts in Gazebo" width="400">
+</p>
 
-Both datasets: 2 cameras (`left`, `fpv`) 640×480 @ 30 fps, 6-DoF state/action, LeRobot **v3.0** format.
+The demo shows a learned ACT policy completing the full sequence: approach,
+grasp, lift, transfer, place, release, and retreat. It is a successful rollout,
+not a benchmark success-rate claim.
 
-## Feasibility & GPU budget
+## Highlights
 
-Both are trainable on a **single H100 (80 GB)** in bf16 — **no training-time quantization needed**.
-Rough budget (see `env/setup_hpc.md` and the plan for the full breakdown):
+- Physics-based SO-101 simulation in Gazebo Harmonic with ROS 2 control, two
+  synchronized RGB cameras, and contact-aware gripper geometry.
+- Numerical IK expert that generates grasp-and-stack demonstrations without
+  privileged inputs at policy inference time.
+- Headless randomized collection in LeRobot v3 format with automatic reachability,
+  uniqueness, controller, and final-stack validation.
+- Closed-loop ACT deployment bridge with timestamp synchronization, joint-limit
+  clipping, velocity limiting, stale-observation rejection, and dry-run mode.
 
-| Model | Steps | ~1 run | Budget incl. tuning |
-|---|---|---|---|
-| Diffusion Policy | 100–150k | ~5–7 h | ~15–20 H100-h |
-| VLA-JEPA (LoRA + WM) | 25–40k | ~5–8 h | ~25–40 H100-h |
-| eval / smoke / restarts | — | — | ~10 H100-h |
-| **Total** | | | **≈ 50–70 H100-hours** |
+## Result
 
-Quantization only matters for **deployment** on the 4070 (see below), not for training.
+| Item | Value |
+|---|---:|
+| Training demonstrations | 100 successful episodes |
+| Raw observations | 183,023 frames |
+| Cameras | 2 × RGB, 640×480 at 30 Hz |
+| Policy | ACT with a fine-tuned ImageNet ResNet-18 backbone |
+| Parameters | 51.6 million |
+| ACT chunk / execution horizon | 50 / 10 actions |
+| Training | 100,000 updates, batch size 8 |
+| Hardware | RTX 4070 Laptop GPU, 8 GB VRAM |
+| Training time | Approximately 8 hours |
 
-## Why LoRA for VLA-JEPA (not `freeze_qwen`)
+The dataset was split by episode into 90 train, 5 validation, and 5 test
+episodes. Long stationary segments remained in the recordings but were capped
+only in the training sample index, retaining the original 30 Hz action
+timeline.
 
-`configuration_vla_jepa.py` force-disables the world model whenever `freeze_qwen=true` (no gradient reaches
-it). To keep the JEPA world-model objective active on the world-model dataset while staying cheap on one
-H100, we LoRA-adapt the Qwen backbone and fully train the action head + world-model predictor. SO-101 is
-6-DoF but the pretrained checkpoint is 7-DoF, so the action/state projection layers are reinitialized
-(`--policy.reinit_modules`) and the gripper index is set to 5 (`--policy.gripper_dim=5`).
+## System overview
 
-## Repo layout
-
-```
-env/setup_hpc.md              # one-time HPC env setup (lerobot 0.5.2-dev source, has vla_jepa)
-scripts/smoke_test.sbatch     # 10-step end-to-end check of BOTH pipelines — RUN FIRST
-slurm/train_diffusion.sbatch  # full Diffusion Policy training job
-slurm/train_vla_jepa.sbatch   # full VLA-JEPA LoRA+WM training job
-data/make_splits.py           # reproducible train/val episode splits
-eval/offline_action_error.py  # offline action-error metrics + trajectory plots (gate before robot)
-eval/rollout_real.md          # real-robot rollout + safety checklist
-```
-
-## Workflow
-
-```bash
-# 0. On HPC: set up the env once
-#    (see env/setup_hpc.md — installs lerobot 0.5.2-dev source with the vla_jepa extra)
-
-# 1. Make reproducible splits (writes data/splits/*.json)
-python data/make_splits.py --repo-id shubham4413/so101_vla
-python data/make_splits.py --repo-id shubham4413/so101_wm
-
-# 2. Smoke test BOTH pipelines (10 steps each) — do NOT skip
-sbatch scripts/smoke_test.sbatch      # check logs for exit codes 0 + PEFT trainable-params line
-
-# 3. Full training (one H100 each)
-sbatch slurm/train_diffusion.sbatch
-sbatch slurm/train_vla_jepa.sbatch
-
-# 4. Offline validation on held-out episodes
-python eval/offline_action_error.py --policy-path <ckpt>/pretrained_model \
-    --repo-id shubham4413/so101_vla --out-dir eval/out/diffusion
-python eval/offline_action_error.py --policy-path <ckpt>/pretrained_model \
-    --repo-id shubham4413/so101_wm  --out-dir eval/out/vlajepa
-
-# 5. Real robot — follow eval/rollout_real.md (safety first)
+```text
+IK expert ──> randomized Gazebo rollouts ──> LeRobot v3 dataset ──> ACT training
+                                                                    │
+Gazebo cameras + joint feedback ──> synchronized ROS bridge ──> ACT policy
+                                                                    │
+                     JointTrajectoryController <── safety-bounded actions
 ```
 
-To train on only the train split, capture the episode list into the `EPISODES` env var before `sbatch`:
-```bash
-EPISODES=$(python data/make_splits.py --repo-id shubham4413/so101_vla --print train)
-sbatch --export=ALL,EPISODES="$EPISODES" slurm/train_diffusion.sbatch
+The policy receives the two RGB observations and the six measured joint
+positions. Ground-truth object poses are used only by the demonstration expert
+and dataset validator.
+
+## Repository layout
+
+```text
+gazebo/
+  launch/       ROS 2 launch files
+  models/       SO-101, workspace, and stacking-part assets
+  scripts/      expert control, collection, and ACT inference
+  worlds/       Gazebo scenes
+training/       ACT training and dataset utilities
+deployment/     real-robot safety and remote-inference experiments
+apptainer/      headless HPC simulation environment
+slurm/          experimental HPC training jobs
+docs/assets/    README media
 ```
 
-## Fallback / PEFT loading
+## Requirements
 
-- **If the VLA-JEPA smoke test fails on the PEFT wrap** (LoRA + custom policy is the one uncertain piece):
-  fall back to a **full fine-tune** — delete all `--peft.*` flags in `slurm/train_vla_jepa.sbatch`, keep
-  everything else (`reinit_modules`, `gripper_dim=5`, world model stays on by default). Costs ~2–3× the
-  hours but is the most reliable path; still fits one H100 at `--batch_size=4`–`8`.
-- **Loading a LoRA checkpoint for eval/deploy:** if `make_policy` can't reattach adapters, merge them into
-  the base once (`PeftModel.from_pretrained(...).merge_and_unload()`) and save a standalone checkpoint to
-  point the eval/rollout tools at.
+- Ubuntu 24.04
+- ROS 2 Jazzy
+- Gazebo Harmonic
+- `gz_ros2_control`, `ros_gz_bridge`, and `ros2_control`
+- A LeRobot source environment compatible with LeRobot dataset format v3.0
+- PyTorch with CUDA support for training or GPU inference
 
-## Deployment note (RTX 4070 mobile, 8 GB)
+The scripts assume a LeRobot checkout at `~/lerobot` by default. Override it
+with `LEROBOT_ROOT` or set `LEROBOT_VENV` to the environment directory used for
+inference.
 
-- **Diffusion Policy** runs real-time on the 4070 — no special handling.
-- **VLA-JEPA** drops the world model at inference (just Qwen-2B + action head), but a 2B VLM on 8 GB is
-  tight and real-time control is not guaranteed. Options: int8/4-bit **inference** quantization, or run
-  inference on a remote/HPC GPU and stream actions to the arm. This is the only place quantization belongs.
+## Run the simulation
 
-See the full plan for rationale and the verified facts it is built on.
-
-## Gazebo and RViz
-
-The simulation has one standard ROS 2 launch entry point. It starts Gazebo,
-`ros2_control`, the joint-state broadcaster, camera bridges, TF publisher and
-RViz together:
+From the repository root:
 
 ```bash
 ./gazebo/scripts/run_sim_rviz.sh
 ```
 
-Do not also run `run_world.sh` or `run_rviz_cameras.sh` in another terminal.
-Two controller/TF publishers on the same ROS domain will produce conflicting
-joint transforms. Stop older launch processes with `Ctrl+C` before using the
-combined command.
+This builds the ROS package when required and starts Gazebo, the trajectory
+controller, camera bridges, robot-state publisher, and RViz. Each interactive
+launch samples an IK-valid evaluation layout near the demonstrated workspace.
 
-The only source of the initial robot state is
-`gazebo/config/initial_pose.yaml`. It contains the world spawn and all six
-joint values in metres/radians. The launch generates the Gazebo world, URDF
-`ros2_control` initial state and RViz grid position from that file.
-
-For a headless synchronization check:
+To run the ground-truth expert in a second terminal:
 
 ```bash
-./gazebo/scripts/run_sim_rviz.sh launch_rviz:=false gz_extra_args:=-s
-./gazebo/scripts/validate_gazebo_tf_sync.py
+./gazebo/scripts/approach_nut.sh
 ```
+
+See [gazebo/README.md](gazebo/README.md) for scene geometry, controller topics,
+headless options, and expert parameters.
+
+## Collect demonstrations
+
+With the GUI simulation running:
+
+```bash
+LEROBOT_PYTHON="$HOME/lerobot/.venv/bin/python" \
+./gazebo/scripts/collect_randomized_lerobot.sh \
+  --episodes 10 \
+  --output "$HOME/so101_data/example_10"
+```
+
+For an unattended run, let the collector start and stop Gazebo itself:
+
+```bash
+SO101_DATA_ROOT="$HOME/so101_data" \
+./gazebo/scripts/collect_randomized_lerobot_headless.sh --episodes 50
+```
+
+The collector rejects unreachable layouts, near-duplicate placements, failed
+trajectories, and rollouts that do not end in a physical stack. Every retained
+episode contains:
+
+```text
+observation.images.left       RGB video
+observation.images.fpv        RGB video
+observation.state             6 measured joint positions
+observation.environment_state source/destination ground-truth poses
+action                        6 controller references
+```
+
+## Train ACT
+
+The reproducible training launcher starts a fresh policy with an
+ImageNet-pretrained ResNet-18 backbone and stationary-frame sample capping:
+
+```bash
+SO101_STORAGE_ROOT="$HOME/so101_artifacts" \
+LEROBOT_ROOT="$HOME/lerobot" \
+./training/train_act_pretrained_trimmed.sh \
+  --dataset /path/to/lerobot_dataset
+```
+
+Defaults match the successful run: 100,000 steps, batch size 8, chunk size 50,
+10 executed actions per observation, VAE enabled, and checkpoints every 10,000
+updates. Dataset files are never modified by the stationary-frame sampler.
+
+## Run ACT inference
+
+Start the simulation, then set the final LeRobot checkpoint explicitly. A
+short dry run verifies camera/state synchronization without commanding joints:
+
+```bash
+SO101_ACT_CHECKPOINT=/path/to/checkpoints/100000/pretrained_model \
+./gazebo/scripts/run_act_inference.sh \
+  --device cuda \
+  --action-horizon 10 \
+  --duration 10
+```
+
+Enable motion only after the dry-run output looks valid:
+
+```bash
+SO101_ACT_CHECKPOINT=/path/to/checkpoints/100000/pretrained_model \
+./gazebo/scripts/run_act_inference.sh \
+  --device cuda \
+  --execute \
+  --action-horizon 10 \
+  --duration 300
+```
+
+`--execute` is deliberately required. Without it, the bridge publishes
+diagnostic predictions but sends no controller command.
+
+## Limitations
+
+- The current result is simulation-only and has not been validated as a robust
+  sim-to-real policy.
+- The successful checkpoint has not yet been evaluated over enough randomized
+  trials to report a statistically meaningful success rate.
+- The controller is position-based; contact forces are approximated through
+  compliant dynamics and command limiting rather than force sensing.
+- Collision proxies are optimized for deterministic, inexpensive collection,
+  not high-fidelity contact identification.
+
+## Acknowledgements
+
+- [LeRobot](https://github.com/huggingface/lerobot) for dataset and policy tooling
+- [TheRobotStudio SO-ARM100](https://github.com/TheRobotStudio/SO-ARM100) for
+  the SO-101 geometry; its retained license is stored with the model assets
+- ROS 2 and Gazebo for simulation and control infrastructure
+
+This project is released under the [Apache License 2.0](LICENSE).

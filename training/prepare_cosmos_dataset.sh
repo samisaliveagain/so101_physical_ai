@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Convert the latest randomized LeRobot dataset, storing the result on the external drive.
+# Convert a randomized LeRobot dataset into the Cosmos training layout.
 set -euo pipefail
 
-DRIVE_ROOT=${DRIVE_ROOT:-"/media/shubhamnagar/One Touch"}
-LEROBOT_ROOT=${LEROBOT_ROOT:-/home/shubhamnagar/lerobot}
+DRIVE_ROOT=${DRIVE_ROOT:-"${SO101_STORAGE_ROOT:-${HOME}/so101_artifacts}"}
+LEROBOT_ROOT=${LEROBOT_ROOT:-"${HOME}/lerobot"}
 DATASET_ROOT=${DATASET_ROOT:-}
 OUTPUT_ROOT=${OUTPUT_ROOT:-}
 CAMERA_KEY=${CAMERA_KEY:-observation.images.left}

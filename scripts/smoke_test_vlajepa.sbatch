@@ -9,18 +9,11 @@
 #SBATCH --error=logs/%x_%j.err
 # Sized for RWTH CLAIX-23 `c23g` (1/4 of a 4× H100 node).
 
-# VLA-JEPA-only smoke test: 10 optimizer steps, batch 2. Confirms the pretrained
-# checkpoint loads, the 6-DoF reinit_modules path works, PEFT wraps this custom policy,
-# AV1 video decodes, and one fwd/bwd/step runs on a single H100.
-# The full job (slurm/train_vla_jepa.sbatch) must not be launched until this exits 0.
+# Ten-step VLA-JEPA validation for AV1 decoding, PEFT setup, and optimization.
 
 set -uo pipefail
 
-# Video decoding: force the `pyav` backend (see --dataset.video_backend below). The datasets are
-# AV1, and lerobot's default torchcodec backend needs a system FFmpeg with a *software* AV1
-# decoder — the RWTH FFmpeg modules ship only CUVID (hardware) AV1 and fail on CPU with
-# "Could not push packet to decoder: Function not implemented". PyAV bundles its own
-# dav1d-enabled FFmpeg, so it decodes AV1 with no module/LD_LIBRARY_PATH juggling.
+# PyAV supplies a software AV1 decoder independent of the cluster FFmpeg build.
 
 source "$HOME/lerobot/.venv/bin/activate"
 : "${SCRATCH:=${HPCWORK:?set SCRATCH or HPCWORK to a fast, large filesystem}}"
@@ -29,17 +22,11 @@ export HF_HUB_ENABLE_HF_TRANSFER=1
 mkdir -p logs "$SCRATCH/train/smoke"
 rm -rf "$SCRATCH/train/smoke/vlajepa"
 
-# `shubham4413/so101_wm` has NO `v3.0` git tag on the Hub (`so101_vla` does), so lerobot's
-# get_safe_version() revision lookup raises before the dataset ever loads. Pointing
-# --dataset.root at the local snapshot skips that lookup entirely.
-# Permanent fix: HfApi().create_tag("shubham4413/so101_wm", tag="v3.0", repo_type="dataset").
+# Load from a concrete snapshot rather than relying on a Hub revision tag.
 DATA_ROOT=${DATA_ROOT:-$(ls -d "$HF_HOME"/hub/datasets--shubham4413--so101_wm/snapshots/*/ | head -1)}
 echo "DATA_ROOT=$DATA_ROOT"
 
-# The pretrained VLA-JEPA config names its two cameras exterior_1_left / exterior_2_left;
-# our dataset uses left / fpv. Map our keys onto the config's slots. The slot assignment is
-# arbitrary (both are plain camera slots; the input projections are reinit'd anyway) but MUST
-# be identical for training, offline eval, and deployment — keep this map in sync everywhere.
+# Map dataset camera names to the pretrained policy input slots.
 RENAME_MAP='{"observation.images.left":"observation.images.exterior_1_left","observation.images.fpv":"observation.images.exterior_2_left"}'
 
 nvidia-smi

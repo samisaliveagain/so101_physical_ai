@@ -97,7 +97,7 @@ def main() -> int:
     args = parser.parse_args()
 
     config = load_config(args.config)
-    check_calibration(Path(config["robot"]["calibration"]))
+    check_calibration(Path(config["robot"]["calibration"]).expanduser())
     for label, camera_config in config["cameras"].items():
         check_camera(label, camera_config)
     if args.read_motors:

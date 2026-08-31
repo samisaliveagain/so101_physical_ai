@@ -9,14 +9,15 @@
 #SBATCH --error=logs/%x_%j.err
 set -euo pipefail
 
-BASE=/hpcwork/ay713634/so101
-PROJECT=/hpcwork/ay713634/so101_physical_ai
-OUT=${OUT:-/hpcwork/ay713634/train/so101_vla_diffusion_${SLURM_JOB_ID}}
+HPC_ROOT=${HPC_ROOT:-"${HPCWORK:-/hpcwork/$USER}"}
+BASE="$HPC_ROOT/so101"
+PROJECT="$HPC_ROOT/so101_physical_ai"
+OUT=${OUT:-$HPC_ROOT/train/so101_vla_diffusion_${SLURM_JOB_ID}}
 
 export PYTHONNOUSERSITE=1
 export HF_HOME="$BASE/hf_cache"
 export HF_LEROBOT_HOME="$BASE/hf_cache/lerobot"
-export TORCH_HOME=/home/ay713634/.cache/torch
+export TORCH_HOME=${TORCH_HOME:-$HOME/.cache/torch}
 export HF_HUB_DISABLE_TELEMETRY=1
 export TOKENIZERS_PARALLELISM=false
 

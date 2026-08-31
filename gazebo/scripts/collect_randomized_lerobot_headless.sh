@@ -3,19 +3,17 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
-DRIVE_ROOT="${DRIVE_ROOT:-/media/shubhamnagar/One Touch}"
+DATA_ROOT="${SO101_DATA_ROOT:-${DRIVE_ROOT:-${HOME}/so101_data}}"
 RUN_STAMP="$(date +%Y%m%d_%H%M%S)"
-DEFAULT_OUTPUT="${DRIVE_ROOT}/so101_gazebo_randomized_stack_${RUN_STAMP}"
+DEFAULT_OUTPUT="${DATA_ROOT}/so101_gazebo_randomized_stack_${RUN_STAMP}"
 SIM_LOG="${PROJECT_ROOT}/.ros/headless_collection_${RUN_STAMP}.log"
 
-if [[ ! -d "${DRIVE_ROOT}" ]] || ! mountpoint -q "${DRIVE_ROOT}"; then
-  printf '%s\n' \
-    "External drive is not mounted at ${DRIVE_ROOT}." \
-    'Mount the OneTouch drive, then run this command again.' >&2
+if ! mkdir -p "${DATA_ROOT}"; then
+  printf 'Could not create data directory: %s\n' "${DATA_ROOT}" >&2
   exit 1
 fi
-if [[ ! -w "${DRIVE_ROOT}" ]]; then
-  printf 'External drive is not writable: %s\n' "${DRIVE_ROOT}" >&2
+if [[ ! -w "${DATA_ROOT}" ]]; then
+  printf 'Data directory is not writable: %s\n' "${DATA_ROOT}" >&2
   exit 1
 fi
 

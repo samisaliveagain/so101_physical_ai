@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""Verify the merged VLA dataset by decoding frames through lerobot's loader.
+"""Decode representative frames from a merged LeRobot dataset."""
 
-Checks episodes 0 (from v1), ~74 (middle), and 148 (last, from v11):
-saves one frame per camera per episode and prints video file sizes.
-"""
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -11,29 +9,42 @@ from PIL import Image
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-ROOT = Path("/media/shubhamnagar/One Touch/shubham4413_lerobot_data/so101_vla_merged")
 
-print("=== video file sizes ===")
-for cam in ["fpv", "left"]:
-    for f in sorted((ROOT / "videos" / f"observation.images.{cam}").rglob("*.mp4")):
-        print(f"  {cam}: {f.relative_to(ROOT / 'videos')}  {f.stat().st_size / 1e6:.1f} MB")
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("root", type=Path)
+    parser.add_argument("--repo-id", default="local/so101_vla")
+    parser.add_argument("--output", type=Path, default=Path("verification_frames"))
+    args = parser.parse_args()
+    root = args.root.expanduser().resolve()
+    output = args.output.expanduser().resolve()
+    output.mkdir(parents=True, exist_ok=True)
 
-ds = LeRobotDataset("shubham4413/so101_vla", root=ROOT)
-print(f"\nloaded: {ds.num_episodes} episodes, {ds.num_frames} frames")
+    print("=== video file sizes ===")
+    for camera in ["fpv", "left"]:
+        video_dir = root / "videos" / f"observation.images.{camera}"
+        for path in sorted(video_dir.rglob("*.mp4")):
+            relative = path.relative_to(root / "videos")
+            print(f"  {camera}: {relative}  {path.stat().st_size / 1e6:.1f} MB")
 
-# global frame index of the middle frame of an episode
-eps = ds.meta.episodes
-starts = list(eps["dataset_from_index"])
-ends = list(eps["dataset_to_index"])
+    dataset = LeRobotDataset(args.repo_id, root=root)
+    print(f"\nloaded: {dataset.num_episodes} episodes, {dataset.num_frames} frames")
+    episodes = dataset.meta.episodes
+    starts = list(episodes["dataset_from_index"])
+    ends = list(episodes["dataset_to_index"])
 
-for ep in [0, 74, 148]:
-    mid = (starts[ep] + ends[ep]) // 2
-    item = ds[int(mid)]
-    for cam in ["fpv", "left"]:
-        img = item[f"observation.images.{cam}"]
-        arr = (img.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
-        out = Path.home() / f"merged_ep{ep}_{cam}.jpg"
-        Image.fromarray(arr).save(out)
-        print(f"episode {ep} {cam}: frame decoded -> {out.name}")
+    for episode in sorted({0, dataset.num_episodes // 2, dataset.num_episodes - 1}):
+        middle = (starts[episode] + ends[episode]) // 2
+        item = dataset[int(middle)]
+        for camera in ["fpv", "left"]:
+            image = item[f"observation.images.{camera}"]
+            array = (image.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+            path = output / f"merged_ep{episode}_{camera}.jpg"
+            Image.fromarray(array).save(path)
+            print(f"episode {episode} {camera}: frame decoded -> {path.name}")
 
-print("\nAll decodes OK -- merge integrity confirmed at start/middle/end.")
+    print("\nAll representative frames decoded successfully.")
+
+
+if __name__ == "__main__":
+    main()

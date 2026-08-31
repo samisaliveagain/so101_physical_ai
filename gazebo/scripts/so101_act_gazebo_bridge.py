@@ -23,9 +23,7 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_URDF = SCRIPT_DIR.parent / "models/so101_dark_blue/so101_dark_blue.urdf"
 DEFAULT_CHECKPOINT = Path(
-    "/media/shubhamnagar/One Touch/so101_training/act/"
-    "act_so101_gazebo_randomized_stack_20260824_005251_20260824_182755/"
-    "checkpoints/100000/pretrained_model"
+    os.environ.get("SO101_ACT_CHECKPOINT", "checkpoints/100000/pretrained_model")
 )
 JOINTS = [
     "shoulder_pan",
@@ -386,8 +384,8 @@ def parse_args():
     parser.add_argument(
         "--action-horizon",
         type=int,
-        default=50,
-        help="actions to execute from each 100-action ACT prediction before replanning",
+        default=10,
+        help="actions to execute from each predicted chunk before replanning",
     )
     parser.add_argument("--rate", type=float, default=30.0)
     parser.add_argument("--duration", type=float, default=90.0, help="seconds; zero runs until Ctrl+C")
@@ -450,9 +448,8 @@ def main():
         raise RuntimeError(
             f"action horizon {args.action_horizon} exceeds checkpoint chunk size {policy.config.chunk_size}"
         )
-    # This changes only how many queued predictions are executed. The trained
-    # checkpoint still predicts its original 100-action chunk, but a fresh
-    # observation is used after this shorter horizon is consumed.
+    # The checkpoint keeps its trained chunk size; this only controls when a
+    # fresh observation replaces the remaining queued actions.
     policy.config.n_action_steps = args.action_horizon
     policy.reset()
     print(f"Loaded ACT checkpoint directly from {args.checkpoint} on {device}", flush=True)

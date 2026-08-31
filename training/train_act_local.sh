@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Train ACT from random initialization while keeping all large files off the root disk.
+# Train ACT while keeping datasets, caches, and checkpoints under one storage root.
 set -euo pipefail
 
-DRIVE_ROOT=${DRIVE_ROOT:-"/media/shubhamnagar/One Touch"}
-LEROBOT_ROOT=${LEROBOT_ROOT:-/home/shubhamnagar/lerobot}
+DRIVE_ROOT=${DRIVE_ROOT:-"${SO101_STORAGE_ROOT:-${HOME}/so101_artifacts}"}
+LEROBOT_ROOT=${LEROBOT_ROOT:-"${HOME}/lerobot"}
 DATASET_ROOT=""
 STEPS=100000
 BATCH_SIZE=8
@@ -33,8 +33,8 @@ while (($#)); do
   esac
 done
 
-if [[ ! -d "$DRIVE_ROOT" ]]; then
-  echo "External drive is not mounted at: $DRIVE_ROOT" >&2
+if ! mkdir -p "$DRIVE_ROOT"; then
+  echo "Could not create storage root: $DRIVE_ROOT" >&2
   exit 1
 fi
 if [[ -z "$DATASET_ROOT" ]]; then
@@ -55,9 +55,8 @@ export HF_HOME="$TRAIN_ROOT/cache/huggingface"
 export HF_DATASETS_CACHE="$HF_HOME/datasets"
 export TORCH_HOME="$TRAIN_ROOT/cache/torch"
 export XDG_CACHE_HOME="$TRAIN_ROOT/cache/xdg"
-# Python multiprocessing uses Unix-domain sockets under TMPDIR. The external
-# drive is exFAT and cannot create those socket files, so keep only tiny runtime
-# socket/lock files on the native Linux filesystem.
+# Python multiprocessing uses Unix-domain sockets under TMPDIR. Keep these
+# runtime files on the native Linux filesystem even when storage is removable.
 export TMPDIR="/tmp/so101_training_${UID}"
 export WANDB_DIR="$TRAIN_ROOT/wandb"
 mkdir -p "$HF_DATASETS_CACHE" "$TORCH_HOME" "$XDG_CACHE_HOME" "$TMPDIR" "$WANDB_DIR" \
@@ -66,7 +65,7 @@ chmod 700 "$TMPDIR"
 
 WRITE_PROBE="$TRAIN_ROOT/.write_probe_$$"
 if ! (umask 077 && : > "$WRITE_PROBE") 2>/dev/null; then
-  echo "External drive is mounted read-only or has filesystem errors: $DRIVE_ROOT" >&2
+  echo "Storage root is read-only or has filesystem errors: $DRIVE_ROOT" >&2
   echo "Training cannot save caches/checkpoints until it is mounted read-write." >&2
   exit 1
 fi
@@ -158,7 +157,6 @@ else
 fi
 
 if [[ "$PUSH_TO_HUB" == true ]]; then
-  hf auth switch --token-name hpc_access
   hf auth whoami >/dev/null
   if [[ -z "$HF_REPO" ]]; then
     HF_USER=$(hf auth whoami --format json | "$LEROBOT_ROOT/.venv/bin/python" -c \

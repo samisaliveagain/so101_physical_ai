@@ -14,8 +14,8 @@ Both cameras are configured for 640×480 RGB input at 30 FPS using MJPEG capture
 Re-run the non-actuating validation at any time with:
 
 ```bash
-cd /home/shubhamnagar/coding/so101_physical_ai
-/home/shubhamnagar/lerobot/.venv/bin/python scripts/check_so101_hardware.py --read-motors
+cd /path/to/so101_physical_ai
+"$HOME/lerobot/.venv/bin/python" scripts/check_so101_hardware.py --read-motors
 ```
 
 This checker opens both cameras, pings motor IDs, compares cached calibration with the motor registers, and reads present positions. It never writes goal positions, torque, PID, or calibration registers.
@@ -29,7 +29,8 @@ This checker opens both cameras, pings motor IDs, compares cached calibration wi
 
 ## Equivalent LeRobot robot arguments
 
-Run LeRobot from `/home/shubhamnagar/lerobot/.venv/bin`. The hardware portion of a command is:
+Run LeRobot from `~/lerobot/.venv/bin`, or substitute the path to your own
+environment. The hardware portion of a command is:
 
 ```bash
 --robot.type=so101_follower \

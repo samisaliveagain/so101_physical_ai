@@ -8,10 +8,7 @@
 #SBATCH --error=logs/%x_%j.err
 # Add site-specific --partition / --account.
 
-# Cheap end-to-end validation of BOTH pipelines: 10 optimizer steps each, tiny batch.
-# Confirms: dataset loads + AV1 decodes, diffusion trains, VLA-JEPA loads the pretrained
-# checkpoint, the 6-DoF reinit_modules load path works, PEFT wraps correctly, and one
-# fwd/bwd/step runs on a single H100. DO NOT launch the full jobs until this passes.
+# Ten-step validation for dataset decoding, model loading, and optimization.
 
 set -uo pipefail
 source "$HOME/lerobot/.venv/bin/activate"
@@ -30,8 +27,8 @@ DIFF_RC=$?
 echo "diffusion smoke exit code: $DIFF_RC"
 
 echo "=================== VLA-JEPA smoke (10 steps, LoRA + WM) ==================="
-# Watch the log for PEFT's "trainable params: ... || all params: ..." line and confirm
-# the trainable set includes Qwen LoRA adapters + model.action_model + model.video_predictor.
+# The log should list Qwen LoRA adapters, the action head, and video predictor
+# as trainable parameters.
 lerobot-train \
   --policy.path=lerobot/VLA-JEPA-Pretrain \
   --dataset.repo_id=shubham4413/so101_wm \

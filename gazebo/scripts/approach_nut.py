@@ -163,28 +163,29 @@ class ApproachNode(Node):
             self.references = [values[name] for name in JOINTS + ["gripper"]]
 
     def send(
-            self, start, arm_goal, gripper_goal, duration, samples=4, phase="motion",
-            allow_contact=False, stop_on_gripper_contact=False, hold_gripper=False):
-        """Send one arm phase while preserving a physically blocked grasp.
+        self,
+        start,
+        arm_goal,
+        gripper_goal,
+        duration,
+        samples=4,
+        phase="motion",
+        allow_contact=False,
+        stop_on_gripper_contact=False,
+        hold_gripper=False,
+    ):
+        """Execute one synchronized arm/gripper trajectory phase.
 
-        ``hold_gripper`` deliberately keeps every trajectory waypoint at the
-        closed command.  In particular, it must not interpolate from the
-        measured gripper angle: contact prevents a position-controlled jaw
-        from reaching its hard-close command, and using that measured angle as
-        the next phase's starting reference creates a brief opening command.
-
-        ``stop_on_gripper_contact`` ends the close phase after the jaw has
-        moved substantially and then remained blocked for a short window.  It
-        avoids recording several seconds of an indistinguishable, stationary
-        grasp while waiting for the trajectory controller's goal timeout.
+        A held gripper keeps the contact preload constant across phase
+        boundaries. Contact detection ends a blocked close command once the
+        measured jaw position has settled.
         """
         goal = FollowJointTrajectory.Goal()
         goal.trajectory.joint_names = JOINTS + ["gripper"]
         destination = list(arm_goal) + [gripper_goal]
         if hold_gripper:
-            # Make the carried-object constraint active from the instant this
-            # goal replaces the preceding one.  This prevents the controller
-            # reference from relaxing toward the contact-blocked measurement.
+            # Preserve contact preload when this goal replaces the preceding
+            # trajectory.
             point = JointTrajectoryPoint()
             point.positions = list(start[:5]) + [gripper_goal]
             goal.trajectory.points.append(point)
@@ -235,10 +236,8 @@ class ApproachNode(Node):
                     - min(value for _, value in contact_window) <= 0.015
                 )
                 if moved >= 0.20 and remaining >= 0.05 and stalled:
-                    # Preserve the command that was active at contact.  It is
-                    # already below the measured angle and therefore supplies
-                    # preload, without stepping all the way to the hard-close
-                    # limit and injecting a large contact impulse.
+                    # Preserve the active preload without stepping directly to
+                    # the hard-close limit.
                     if self.references is not None:
                         contact_gripper_command = min(
                             self.positions[5] - 0.02,
@@ -253,8 +252,7 @@ class ApproachNode(Node):
                     response = cancel_future.result() if cancel_future.done() else None
                     if response is not None and response.goals_canceling:
                         contact_detected = True
-                        # Ensure the canceled goal has released the controller
-                        # before immediately starting the lift phase.
+                        # Wait for the controller to release the canceled goal.
                         release_deadline = time.monotonic() + 0.5
                         while (rclpy.ok() and not result_future.done()
                                and time.monotonic() < release_deadline):
@@ -265,8 +263,8 @@ class ApproachNode(Node):
                     f"{phase}: detected stable contact at measured gripper="
                     f"{self.positions[5]:.3f} rad; holding {contact_gripper_command:.3f} rad "
                     "and beginning lift without goal-timeout pause")
-                # The arm starts the next phase from feedback, but the gripper
-                # start value remains the contact-time command reference.
+                # Arm motion starts from feedback; the gripper retains its
+                # contact-time command reference.
                 return list(self.positions[:5]) + [contact_gripper_command]
             if not result_future.done():
                 raise RuntimeError(f"{phase} trajectory did not finish within {duration + 3.0:.1f} seconds")
@@ -276,15 +274,12 @@ class ApproachNode(Node):
         if wrapped is None:
             raise RuntimeError(f"{phase} trajectory returned no result")
         if wrapped.status != 4 or wrapped.result.error_code != 0:
-            # A position-controlled gripper cannot reach its empty-hand hard
-            # close angle while an object is held. Accept only gripper contact
-            # violations: every arm joint must still have reached its waypoint.
+            # Object contact can prevent the position-controlled jaw from
+            # reaching its empty-hand limit. Arm accuracy remains mandatory.
             arm_error = max(abs(self.positions[i] - arm_goal[i]) for i in range(5))
             gripper_moved = self.positions[5] < start[5] - 0.20
             contact_error = wrapped.result.error_code in (-4, -5)
-            # Closing contact can deflect the lightweight arm within its
-            # configured 0.20 rad path tolerance. Once carrying the nut, keep
-            # the tighter 0.12 rad check for lift/transfer/place accuracy.
+            # Closing contact allows more arm deflection than transport phases.
             allowed_arm_error = 0.20 if phase == "gripper close" else 0.12
             if (allow_contact and contact_error and arm_error <= allowed_arm_error and
                     (phase != "gripper close" or gripper_moved)):
@@ -352,10 +347,8 @@ def main():
     node.get_logger().info(
         f"target world XYZ={target}; IK error={error*1000:.1f} mm, downward alignment={downward:.3f}")
 
-    # Plan every Cartesian phase before sending the first command.  Computing
-    # IK between executed phases used to leave several seconds of identical
-    # observations in the middle of each demonstration, making grasp state
-    # ambiguous to a one-observation ACT policy.
+    # Plan all Cartesian phases before execution so control remains continuous
+    # throughout the recorded demonstration.
     if not args.approach_only:
         grasp_target = (rim_x, rim_y, args.z + args.grasp_height)
         grasp_q, error, downward = kinematics.ik(grasp_target, goal_q, radial)

@@ -39,7 +39,7 @@ For the HPC HTTP deployment, do not use a generic LeRobot rollout command. Follo
 `deployment/HTTP_INFERENCE.md` and begin with the repository's fail-closed client:
 
 ```bash
-/home/shubhamnagar/lerobot/.venv/bin/python deployment/so101_http_slow_rollout.py \
+"$HOME/lerobot/.venv/bin/python" deployment/so101_http_slow_rollout.py \
   --cycles 1 --arm SAFE_SLOW_ROLLOUT
 ```
 

@@ -160,19 +160,19 @@ the final nut pose confirms a physical stack:
 ./gazebo/scripts/collect_randomized_lerobot_headless.sh \
   --episodes 50 \
   --seed 20260826 \
-  --exclude-dataset "/media/shubhamnagar/One Touch/so101_gazebo_randomized_stack_20260824_005251"
+  --exclude-dataset "/path/to/previous_dataset"
 ```
 
 Repeat `--exclude-dataset PATH` to exclude multiple earlier collections.
 
-The OneTouch drive must be mounted and writable at
-`/media/shubhamnagar/One Touch`. Each run creates a new timestamped directory,
-for example
-`/media/shubhamnagar/One Touch/so101_gazebo_randomized_stack_20260823_143000`,
-so an existing dataset is never overwritten. Pass `--output /another/path` to
-override it. Headless Gazebo output is saved under `.ros/` for diagnostics.
+Headless collection writes to `~/so101_data` by default. Set
+`SO101_DATA_ROOT=/path/to/storage` to use another disk. Each run creates a new
+timestamped directory, so an existing dataset is never overwritten. Pass
+`--output /another/path` to override it. Headless Gazebo output is saved under
+`.ros/` for diagnostics.
 
-The launcher uses `/home/shubhamnagar/lerobot/.venv` and writes LeRobot v3
+The launcher uses `~/lerobot/.venv` by default; set `LEROBOT_PYTHON` to use a
+different environment. It writes LeRobot v3
 Parquet metadata/data plus AV1 videos for `observation.images.left` and
 `observation.images.fpv`. `observation.state` contains measured URDF joint
 positions in radians and `action` contains the trajectory controller reference.
@@ -198,10 +198,12 @@ evaluation range:
 ./gazebo/scripts/run_sim_rviz.sh nut_xy_jitter:=0.008 nut_yaw_jitter_deg:=5
 ```
 
-In a second terminal, first run inference without moving the robot:
+In a second terminal, point the launcher at a LeRobot `pretrained_model`
+directory and first run inference without moving the robot:
 
 ```bash
-./gazebo/scripts/run_act_inference.sh --device cuda --duration 10
+SO101_ACT_CHECKPOINT=/path/to/checkpoints/100000/pretrained_model \
+./gazebo/scripts/run_act_inference.sh --device cuda --action-horizon 10 --duration 10
 ```
 
 The bridge reads `/arm_controller/controller_state` and both 640x480 camera
@@ -213,16 +215,15 @@ publishes raw and safety-bounded predictions on
 After inspecting the predicted actions, execute one bounded 90-second rollout:
 
 ```bash
-./gazebo/scripts/run_act_inference.sh --device cuda --execute
+SO101_ACT_CHECKPOINT=/path/to/checkpoints/100000/pretrained_model \
+./gazebo/scripts/run_act_inference.sh \
+  --device cuda --execute --action-horizon 10 --duration 300
 ```
 
-The launcher executes 50 actions from each predicted 100-action ACT chunk and
-then replans from new camera and joint observations. This is an inference-only
-setting; it does not modify or retrain the checkpoint. The 50-action default
-avoids repeatedly replaying only the low-motion start of a chunk. Use
-`--action-horizon 20` for more frequent correction after confirming the policy
-still makes progress, or
-`--action-horizon 100` to reproduce the original open-loop behavior.
+The successful checkpoint predicts 50-action chunks and executes 10 actions
+before replanning from new camera and joint observations. This inference-only
+setting does not modify or retrain the checkpoint. Larger horizons reduce
+inference frequency but make the rollout more open-loop.
 
 The two image streams and controller feedback are buffered and matched using
 their Gazebo simulation timestamps before each inference call. The defaults
@@ -247,7 +248,7 @@ deterministic layout without changing the simulation:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-/home/shubhamnagar/lerobot/.venv/bin/python \
+"$HOME/lerobot/.venv/bin/python" \
   gazebo/scripts/randomize_nuts.py --seed 101 --dry-run
 ```
 
@@ -314,9 +315,7 @@ It also sanitizes Snap/Core20 library variables before starting RViz.
 
 ## Calibration and initial pose
 
-The simulated arm uses the **follower** calibration supplied at
-`/home/shubhamnagar/calibration_lerobot_data_collect/calibration/robots/so_follower/my_awesome_follower_arm.json`.
-A project-local snapshot is stored in
+The simulated arm uses the project-local follower calibration stored in
 `config/so101_follower_calibration.json`. The leader calibration is not used for
 the simulated follower geometry.
 

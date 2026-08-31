@@ -3,7 +3,7 @@
 set -euo pipefail
 
 HOST=${HOST:-rwth-gpu}
-REMOTE_ROOT=${REMOTE_ROOT:-/hpcwork/ay713634/so101_cosmos}
+REMOTE_ROOT=${REMOTE_ROOT:-/hpcwork/${HPC_USER:-$USER}/so101_cosmos}
 LOCAL_DATASET=${LOCAL_DATASET:-}
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 

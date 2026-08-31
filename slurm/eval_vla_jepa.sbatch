@@ -10,14 +10,15 @@
 
 set -euo pipefail
 
-source /home/dl125352/lerobot/.venv/bin/activate
+source "${LEROBOT_VENV:-$HOME/lerobot/.venv}/bin/activate"
 
-export HF_HOME=${HF_HOME:-/hpcwork/dl125352/hf}
+HPC_ROOT=${HPC_ROOT:-"${HPCWORK:-/hpcwork/$USER}"}
+export HF_HOME=${HF_HOME:-$HPC_ROOT/hf}
 export HF_XET_HIGH_PERFORMANCE=1
 
-PROJECT_DIR=${PROJECT_DIR:-/home/dl125352/so101_physical_ai}
-POLICY_PATH=${POLICY_PATH:-/hpcwork/dl125352/train/so101_wm_vlajepa/checkpoints/030000/pretrained_model}
-DATASET_ROOT=${DATASET_ROOT:-/hpcwork/dl125352/hf/hub/datasets--shubham4413--so101_wm/snapshots/96e2ecc061a02d2952083128350f6815de30cb9f}
+PROJECT_DIR=${PROJECT_DIR:-$HPC_ROOT/so101_physical_ai}
+POLICY_PATH=${POLICY_PATH:-$HPC_ROOT/train/so101_wm_vlajepa/checkpoints/030000/pretrained_model}
+: "${DATASET_ROOT:?set DATASET_ROOT to the local LeRobot dataset snapshot}"
 MAX_EPISODES=${MAX_EPISODES:-0}
 OUT_DIR=${OUT_DIR:-$PROJECT_DIR/eval/out/vlajepa_030000}
 

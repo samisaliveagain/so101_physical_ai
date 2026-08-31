@@ -2,9 +2,9 @@
 # Start a new ACT run with pretrained vision and reduced stationary-frame sampling.
 set -euo pipefail
 
-DRIVE_ROOT=${DRIVE_ROOT:-"/media/shubhamnagar/One Touch"}
-LEROBOT_ROOT=${LEROBOT_ROOT:-/home/shubhamnagar/lerobot}
-DATASET_ROOT="${DRIVE_ROOT}/so101_gazebo_combined_verified_100_20260826"
+DRIVE_ROOT=${DRIVE_ROOT:-"${SO101_STORAGE_ROOT:-${HOME}/so101_artifacts}"}
+LEROBOT_ROOT=${LEROBOT_ROOT:-"${HOME}/lerobot"}
+DATASET_ROOT=""
 STEPS=100000
 BATCH_SIZE=8
 NUM_WORKERS=4
@@ -23,11 +23,11 @@ Starts a completely new ACT run. Resuming an older checkpoint is intentionally
 not supported.
 
 Options:
-  --dataset PATH             LeRobot dataset (default: combined verified 100)
+  --dataset PATH             LeRobot dataset (required)
   --steps N                  Training updates (default: 100000)
   --batch-size N             Batch size (default: 8)
   --num-workers N            Data-loader workers (default: 4)
-  --chunk-size N             Predicted ACT chunk (default: 100)
+  --chunk-size N             Predicted ACT chunk (default: 50)
   --action-horizon N         Actions executed before replanning (default: 10)
   --static-threshold RAD     Per-step stationary threshold (default: 0.0001)
   --max-static-frames N      Maximum sampled internal hold (default: 15)
@@ -71,8 +71,12 @@ if [[ ! "$NUM_WORKERS" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
-if [[ ! -d "$DRIVE_ROOT" || ! -w "$DRIVE_ROOT" ]]; then
-  echo "External drive is not mounted read-write at: $DRIVE_ROOT" >&2
+if [[ -z "$DATASET_ROOT" ]]; then
+  echo "--dataset PATH is required." >&2
+  exit 2
+fi
+if ! mkdir -p "$DRIVE_ROOT" || [[ ! -w "$DRIVE_ROOT" ]]; then
+  echo "Storage root is not writable: $DRIVE_ROOT" >&2
   exit 1
 fi
 if [[ ! -f "$DATASET_ROOT/meta/info.json" ]]; then
